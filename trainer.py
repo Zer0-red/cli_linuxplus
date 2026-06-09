@@ -34,6 +34,7 @@ import os
 import random
 import re
 import sys
+import textwrap
 
 # --------------------------------------------------------------------------- #
 #  Scenario bank  (all original, written from the published XK0-006 objectives)
@@ -1029,6 +1030,350 @@ SCENARIOS = [
 
 
 # --------------------------------------------------------------------------- #
+#  Tutorial briefings  (used only in Tutorial difficulty)
+#  keyed by scenario id ->  why | flags [[flag, meaning], ...] | target |
+#                           tool_label (override the auto-detected tool name)
+#  Scenarios without an entry still work in Tutorial mode: the brief falls
+#  back to the scenario's explanation plus any flags found in the answer.
+# --------------------------------------------------------------------------- #
+
+TEACH = {
+    # ---- 1.0 ----
+    "proc-ps": {"why": "ps takes a one-time snapshot of the process table.",
+        "flags": [["a", "(BSD) processes of all users"],
+                  ["u", "(BSD) user-oriented detail: owner, %CPU, %MEM"],
+                  ["x", "(BSD) include processes with no controlling tty"],
+                  ["-e", "(System V) every process"],
+                  ["-f", "(System V) full-format listing"]],
+        "target": "every process on the system"},
+    "proc-kill9": {"why": "kill sends a signal to a process by PID.",
+        "flags": [["-9 / -KILL", "SIGKILL: force kill, cannot be caught"],
+                  ["-15 / -TERM", "SIGTERM: polite stop (the default)"],
+                  ["-s SIG", "choose the signal by name or number"]],
+        "target": "the stuck PID 4821"},
+    "proc-killall": {"why": "killall signals processes by NAME, not PID.",
+        "flags": [["(name)", "sends SIGTERM by default"],
+                  ["-9", "force with SIGKILL"],
+                  ["-i", "ask for confirmation on each match"]],
+        "target": "every process named nginx"},
+    "proc-renice": {"why": "renice changes the niceness of an ALREADY running process (nice does it at launch).",
+        "flags": [["N", "the new nice value (-20 highest .. 19 lowest priority)"],
+                  ["-n N", "same, stated explicitly"],
+                  ["-p PID", "target a PID (the default)"],
+                  ["-u USER", "target all of a user's processes"]],
+        "target": "running PID 2000, set to nice 10"},
+    "proc-lsof-port": {"why": "lsof lists open files; sockets count as files, so it can map a port to a process.",
+        "flags": [["-i", "internet (network) connections"],
+                  ["-i :PORT", "a specific port"],
+                  ["-p PID", "files opened by a PID"]],
+        "target": "whatever is on TCP port 80"},
+    "proc-nohup": {"why": "Closing a shell sends SIGHUP to its children; nohup makes a job ignore it, and trailing & backgrounds it.",
+        "target": "./backup.sh, kept alive after logout"},
+    "sched-crontab-edit": {"why": "crontab manages a user's scheduled jobs.",
+        "flags": [["-e", "edit the crontab"], ["-l", "list it"],
+                  ["-r", "remove it"], ["-u USER", "act on another user's crontab"]]},
+    "dev-modprobe": {"why": "modprobe loads a kernel module AND its dependencies (insmod ignores deps).",
+        "flags": [["(name)", "load the module + dependencies"],
+                  ["-r", "remove a module"], ["-v", "verbose"]],
+        "target": "the vfio module"},
+    "dev-modprobe-r": {"why": "modprobe -r (or rmmod) unloads a module.",
+        "flags": [["-r", "remove the module + unused deps"],
+                  ["rmmod", "remove just the one module"]],
+        "target": "the loaded pcspkr module"},
+    "dev-modinfo": {"why": "modinfo prints a module's metadata even when it isn't loaded.",
+        "flags": [["-p", "parameters only"], ["-d", "description"],
+                  ["-l", "license"]], "target": "the e1000e module"},
+    "dev-dracut": {"why": "dracut builds the initramfs (the early-boot image of drivers/modules).",
+        "flags": [["-f / --force", "overwrite the existing image"],
+                  ["--kver V", "build for a specific kernel version"],
+                  ["-v", "verbose"]],
+        "target": "the current kernel's initramfs (Debian: update-initramfs -u)"},
+    "dev-lsblk": {"why": "lsblk shows block devices as a tree.",
+        "flags": [["-f", "show filesystems/UUIDs"], ["-p", "full device paths"],
+                  ["-o COLS", "choose columns"]]},
+    "dev-dmesg": {"why": "dmesg prints the kernel ring buffer (hardware/driver messages).",
+        "flags": [["-T", "human-readable timestamps"], ["-w", "follow/wait for new"],
+                  ["-l err", "filter by level"]]},
+    "lvm-pvcreate": {"why": "LVM stacks: physical volume -> volume group -> logical volume. pvcreate makes step 1.",
+        "target": "the new disk /dev/sdb"},
+    "lvm-vgcreate": {"why": "vgcreate pools one or more PVs into a named volume group.",
+        "flags": [["<vgname> <pv...>", "name first, then the physical volume(s)"]],
+        "target": "VG 'datavg' built on /dev/sdb"},
+    "lvm-lvcreate": {"why": "lvcreate carves a logical volume out of a volume group.",
+        "flags": [["-L SIZE", "fixed size, e.g. 20G"],
+                  ["-l 100%FREE", "by extents/percentage instead"],
+                  ["-n NAME", "name the logical volume"]],
+        "target": "20G LV 'web' from VG 'datavg'"},
+    "lvm-lvextend": {"why": "lvextend grows an LV; with -r it grows the filesystem in the same step.",
+        "flags": [["-L +SIZE", "ADD to current size (+5G)"],
+                  ["-l +100%FREE", "use all free extents"],
+                  ["-r / --resizefs", "resize the filesystem too"]],
+        "target": "/dev/datavg/web, +5G"},
+    "fs-resize2fs": {"why": "resize2fs grows (or shrinks, when unmounted) ext2/3/4 filesystems.",
+        "target": "the ext4 fs on /dev/datavg/web"},
+    "fs-xfsgrow": {"why": "xfs_growfs grows a MOUNTED XFS filesystem (XFS only grows, never shrinks).",
+        "flags": [["<mountpoint>", "note: takes the mount point, not the device"]],
+        "target": "the XFS mounted at /data"},
+    "fs-mkfs": {"why": "mkfs writes a fresh filesystem onto a partition (this erases it!).",
+        "flags": [["mkfs.TYPE", "e.g. mkfs.ext4, mkfs.xfs"],
+                  ["-t TYPE", "alternative: mkfs -t ext4"],
+                  ["-L LABEL", "set a filesystem label"]],
+        "target": "/dev/sdc1 as ext4"},
+    "fs-mount-opts": {"why": "mount attaches a device into the directory tree; -o passes options.",
+        "flags": [["-o ro", "read-only"], ["-r", "read-only shortcut"],
+                  ["-o noexec,nosuid", "common hardening options"],
+                  ["-t TYPE", "force a filesystem type"]],
+        "target": "/dev/sdc1 at /mnt/data, read-only"},
+    "fs-df": {"why": "df reports free/used space per mounted filesystem.",
+        "flags": [["-h", "human units (1024-based)"], ["-H", "SI units (1000-based)"],
+                  ["-T", "show filesystem type"], ["-i", "show inodes instead"]]},
+    "fs-du": {"why": "du estimates how much space files/dirs occupy.",
+        "flags": [["-s", "summarize: one total"], ["-h", "human-readable"],
+                  ["-a", "include individual files"], ["--max-depth=N", "limit depth"]],
+        "target": "the /var/log directory"},
+    "fs-fsck": {"why": "fsck checks/repairs a filesystem; the device MUST be unmounted.",
+        "flags": [["-y", "answer yes to all repairs"], ["-n", "check only, no changes"],
+                  ["-f", "force even if marked clean"]], "target": "unmounted /dev/sdc1"},
+    "shell-grep": {"why": "grep searches text for a pattern.",
+        "flags": [["-r / -R", "recurse into directories"], ["-i", "ignore case"],
+                  ["-n", "show line numbers"], ["-l", "list matching filenames only"],
+                  ["-v", "invert: lines that DON'T match"], ["-E", "extended regex"]],
+        "target": "the word 'error' under /var/log, case-insensitive"},
+    "shell-find-size": {"why": "find walks the tree and filters by tests like size, name, time.",
+        "flags": [["-size +N[kMG]", "larger than N (e.g. +100M)"],
+                  ["-type f", "regular files only"], ["-name PAT", "match by name"],
+                  ["-mtime N", "by modification age in days"]],
+        "target": "files over 100 MB, starting at /"},
+    "shell-stderr": {"tool_label": "redirection (2>)",
+        "why": "Each stream has a file descriptor: 1 = stdout, 2 = stderr.",
+        "flags": [["2> file", "send ONLY stderr to file"],
+                  ["> file", "send stdout"], ["2>&1", "merge stderr into stdout"],
+                  ["&> file", "send BOTH to one file"]],
+        "target": "stderr of ./build.sh into errors.log"},
+    "shell-sort-uniq": {"tool_label": "sort | uniq",
+        "why": "uniq only collapses ADJACENT duplicate lines, so you sort first, then pipe.",
+        "flags": [["sort", "order the lines"], ["uniq -c", "collapse + prefix a count"],
+                  ["uniq -d", "show only duplicated lines"]],
+        "target": "count of each unique line in access.log"},
+    "backup-tar-create": {"why": "tar bundles files into one archive, optionally compressed.",
+        "flags": [["-c", "create"], ["-x", "extract"], ["-z", "gzip"],
+                  ["-j", "bzip2"], ["-v", "verbose"],
+                  ["-f FILE", "the archive file (name comes right after f)"]],
+        "target": "gzip archive backup.tar.gz of /etc"},
+    "backup-tar-extract": {"why": "Same tar, swap create for extract.",
+        "flags": [["-x", "extract"], ["-z", "gzip"], ["-f FILE", "the archive"],
+                  ["-C DIR", "extract into a different directory"]],
+        "target": "backup.tar.gz into the current directory"},
+    "backup-rsync": {"why": "rsync syncs files efficiently, locally or over SSH.",
+        "flags": [["-a", "archive: recursive + preserve perms/times/links"],
+                  ["-v", "verbose"], ["-z", "compress during transfer"],
+                  ["--delete", "mirror deletions too"], ["-n", "dry run"]],
+        "target": "/home/data/ -> backup01:/srv/data (trailing / copies contents)"},
+    "backup-gzip": {"why": "gzip compresses a single file in place.",
+        "flags": [["(file)", "compress -> file.gz, removes original"],
+                  ["-d", "decompress (= gunzip)"], ["-k", "keep the original"],
+                  ["-9", "maximum compression"]], "target": "huge.log"},
+    "virt-virsh-list": {"why": "virsh is the libvirt command-line client.",
+        "flags": [["list", "running domains"], ["--all", "include powered-off VMs"],
+                  ["start/shutdown NAME", "control a VM"]]},
+    # ---- 2.0 ----
+    "sd-enable-now": {"why": "systemctl controls systemd units. enable = at boot; start = now.",
+        "flags": [["enable", "start automatically at boot"],
+                  ["--now", "ALSO start (or stop) immediately"],
+                  ["disable", "remove from boot"]],
+        "target": "sshd: enable + start in one go"},
+    "sd-status": {"why": "status shows a unit's active state, main PID, and recent log lines.",
+        "flags": [["status UNIT", "state + last journal lines"],
+                  ["is-active UNIT", "just active/inactive"]], "target": "nginx"},
+    "sd-daemon-reload": {"why": "systemd caches unit files; after editing one by hand you must reload the manager's view.",
+        "target": "re-read unit files (NOT the same as reloading a service)"},
+    "sd-mask": {"why": "disable only stops boot-start; mask links the unit to /dev/null so it can't start at all.",
+        "flags": [["mask UNIT", "make un-startable"], ["unmask UNIT", "reverse it"]],
+        "target": "the bluetooth service"},
+    "log-journalctl-unit": {"why": "journalctl queries the binary systemd journal.",
+        "flags": [["-u UNIT", "filter by unit"], ["-b", "current boot"],
+                  ["-b -1", "previous boot"], ["-p PRIO", "by priority"],
+                  ["-f", "follow live"], ["-k", "kernel only"],
+                  ["--since/--until", "time range"]],
+        "target": "sshd, current boot"},
+    "log-journalctl-follow": {"why": "Like tail -f, but for the journal.",
+        "flags": [["-f / --follow", "stream new entries live"],
+                  ["-n N", "start with the last N lines"]]},
+    "sw-apt-install": {"why": "apt is the Debian/Ubuntu package manager front end.",
+        "flags": [["update", "refresh the package index first"],
+                  ["install PKG", "install"], ["remove PKG", "remove"],
+                  ["upgrade", "upgrade installed packages"]], "target": "htop"},
+    "sw-dnf-install": {"why": "dnf is the Red Hat/Fedora package manager (yum is its older alias).",
+        "flags": [["install PKG", "install"], ["remove PKG", "remove"],
+                  ["check-update", "list available updates"], ["search TERM", "find"]],
+        "target": "httpd"},
+    "user-useradd": {"why": "useradd creates an account; pair it with passwd to set a password.",
+        "flags": [["-m", "create the home directory"], ["-s SHELL", "login shell"],
+                  ["-G g1,g2", "supplementary groups"], ["-c TEXT", "comment/full name"]],
+        "target": "alice, with home dir and /bin/bash"},
+    "user-usermod-group": {"why": "usermod edits an existing account. The classic trap: -G alone REPLACES all groups.",
+        "flags": [["-a", "APPEND (must be combined with -G)"],
+                  ["-G GROUP", "supplementary group(s)"], ["-L", "lock"],
+                  ["-s SHELL", "change shell"]],
+        "target": "add alice to 'docker' WITHOUT dropping her other groups"},
+    "user-lock": {"why": "Locking disables password login without deleting the account.",
+        "flags": [["usermod -L", "lock"], ["passwd -l", "lock (alternative)"],
+                  ["-U / -u", "unlock"]], "target": "the user bob"},
+    "ctr-run": {"why": "run creates and starts a NEW container from an image (podman and docker share this syntax).",
+        "flags": [["-d", "detached (background)"], ["-p H:C", "publish host:container port"],
+                  ["-it", "interactive + TTY"], ["--name N", "name it"],
+                  ["-e K=V", "environment variable"], ["-v SRC:DST", "mount a volume"]],
+        "target": "nginx, background, host 8080 -> container 80"},
+    "ctr-ps": {"why": "ps lists containers (running by default).",
+        "flags": [["-a", "all, including stopped"], ["-q", "IDs only"]]},
+    "ctr-logs": {"why": "Containers capture stdout/stderr; logs replays them.",
+        "flags": [["(name)", "show the logs"], ["-f", "follow live"],
+                  ["--tail N", "last N lines"]], "target": "the 'web' container"},
+    "ctr-exec": {"why": "exec runs a command INSIDE an already-running container (run would start a new one).",
+        "flags": [["-it", "interactive shell"], ["(name) (cmd)", "container then command"]],
+        "target": "a bash shell in 'web'"},
+    "ctr-build": {"why": "build turns a Dockerfile + context into an image.",
+        "flags": [["-t name:tag", "tag the image"], ["-f FILE", "alternate Dockerfile"],
+                  [".", "the build context (don't forget it!)"]],
+        "target": "image myapp:1.0 from ./Dockerfile"},
+    "ctr-prune": {"why": "prune reclaims space from unused objects.",
+        "flags": [["image prune", "dangling images"],
+                  ["system prune", "containers + networks + more"],
+                  ["-a", "all unused, not just dangling"], ["-f", "skip confirmation"]]},
+    # ---- 3.0 ----
+    "sec-chmod-octal": {"why": "Octal mode: r=4, w=2, x=1, summed per column (owner/group/other).",
+        "flags": [["NNN", "three octal digits, e.g. 755"], ["-R", "recurse"]],
+        "target": "script.sh -> rwx r-x r-x"},
+    "sec-chmod-symbolic": {"why": "Symbolic mode: who (u/g/o/a) + op (+/-/=) + perms (rwx).",
+        "flags": [["u/g/o/a", "user/group/other/all"], ["+ - =", "add/remove/set"]],
+        "target": "add execute for the owner of deploy.sh"},
+    "sec-chown": {"why": "chown changes ownership; user:group sets both at once.",
+        "flags": [["user:group", "set owner and group"], [":group", "group only"],
+                  ["-R", "recurse a tree"]], "target": "report.txt -> alice:staff"},
+    "sec-setfacl": {"why": "ACLs grant extra per-user/group permissions beyond owner/group/other.",
+        "flags": [["-m", "modify/add an entry"], ["-x", "remove an entry"],
+                  ["-b", "strip all ACLs"], ["u:USER:perms", "a user entry"],
+                  ["-R", "recurse"]], "target": "give bob rw on project.txt (view with getfacl)"},
+    "sec-chattr": {"why": "chattr sets low-level filesystem attributes; +i blocks all changes even by root.",
+        "flags": [["+i", "immutable"], ["-i", "remove immutable"],
+                  ["+a", "append-only"]], "target": "/etc/resolv.conf (check with lsattr)"},
+    "sec-setenforce": {"why": "setenforce flips SELinux between enforcing and permissive at runtime.",
+        "flags": [["0 / Permissive", "log denials but allow"],
+                  ["1 / Enforcing", "block denials"]],
+        "target": "permissive now (persist via /etc/selinux/config; check with getenforce)"},
+    "sec-restorecon": {"why": "restorecon re-labels files to the contexts the SELinux policy expects.",
+        "flags": [["-R", "recurse"], ["-v", "verbose"], ["-F", "force a reset"]],
+        "target": "/var/www and everything under it"},
+    "sec-setsebool": {"why": "Booleans toggle optional SELinux policy behaviors.",
+        "flags": [["-P", "persistent: survive reboot"], ["on / off", "the value"]],
+        "target": "httpd_can_network_connect, on, permanently (list with getsebool -a)"},
+    "sec-firewalld-port": {"why": "firewall-cmd manages firewalld zones/rules.",
+        "flags": [["--permanent", "persist (apply with --reload)"],
+                  ["--add-port=P/proto", "open a port"],
+                  ["--add-service=NAME", "open a known service"],
+                  ["--zone=Z", "target a zone"], ["--list-all", "show config"]],
+        "target": "open 443/tcp permanently"},
+    "sec-firewalld-reload": {"why": "Permanent rules don't take effect until reloaded into the runtime.",
+        "target": "apply the permanent rules now"},
+    "sec-ufw-allow": {"why": "ufw is Ubuntu's simple firewall front end.",
+        "flags": [["allow PORT/proto", "permit"], ["allow NAME", "by service name"],
+                  ["deny", "block"], ["enable", "turn the firewall on"],
+                  ["status", "show rules"]], "target": "inbound SSH (22/tcp)"},
+    "sec-sshkeygen": {"why": "ssh-keygen creates the key pair for password-less SSH.",
+        "flags": [["-t ed25519", "key type (modern default)"], ["-b BITS", "key size"],
+                  ["-C TEXT", "a label/comment"], ["-f FILE", "output filename"]],
+        "target": "a new key pair (then push it with ssh-copy-id)"},
+    "sec-find-suid": {"why": "SUID files run as their owner (often root) - a key thing to audit.",
+        "flags": [["-perm -4000", "the SUID bit is set"],
+                  ["-perm -2000", "SGID"], ["-type f", "files only"]],
+        "target": "all SUID files, from /"},
+    "sec-visudo": {"why": "visudo locks and syntax-checks sudoers before saving, so a typo can't lock you out.",
+        "target": "edit the sudoers policy safely"},
+    # ---- 4.0 ----
+    "auto-shebang": {"tool_label": "shebang (#!)",
+        "why": "The first line names the interpreter that runs the script.",
+        "flags": [["#!/bin/bash", "fixed path to bash"],
+                  ["#!/usr/bin/env bash", "find bash via PATH (portable)"]]},
+    "auto-numeq": {"tool_label": "bash test operators",
+        "why": "Numeric tests use lettered operators; symbols (== < >) are for STRINGS.",
+        "flags": [["-eq / -ne", "equal / not equal"], ["-lt / -le", "less than / or equal"],
+                  ["-gt / -ge", "greater than / or equal"]]},
+    "auto-exitcode": {"tool_label": "exit status",
+        "why": "Every command sets a return code: 0 = success, non-zero = failure.",
+        "flags": [["$?", "the last command's exit status"]]},
+    "auto-ansible-playbook": {"why": "ansible-playbook runs a full YAML playbook.",
+        "flags": [["FILE.yml", "the playbook"], ["-i INV", "inventory file"],
+                  ["--check", "dry run"], ["--limit HOST", "subset of hosts"],
+                  ["-K", "prompt for the become (sudo) password"]], "target": "site.yml"},
+    "auto-ansible-ping": {"why": "Ad-hoc ansible runs a single module against hosts (no playbook).",
+        "flags": [["all", "the host group/pattern"], ["-m MODULE", "the module"],
+                  ["-a ARGS", "module arguments"]], "target": "ping all inventory hosts"},
+    "auto-git-commit": {"why": "git records staged changes as a commit.",
+        "flags": [["commit -m MSG", "commit staged files with a message"],
+                  ["add FILE", "stage changes"], ["-am MSG", "stage tracked + commit"],
+                  ["push", "upload to remote"]], "target": "message 'fix deploy script'"},
+    "auto-kubectl-apply": {"why": "kubectl apply creates/updates resources declaratively from a manifest.",
+        "flags": [["apply -f FILE", "apply a manifest"], ["get pods", "list pods"],
+                  ["delete -f FILE", "remove"], ["-n NS", "namespace"]],
+        "target": "deploy.yaml"},
+    "auto-kubectl-scale": {"why": "scale sets the desired replica count and Kubernetes reconciles to it.",
+        "flags": [["scale deployment NAME", "what to scale"],
+                  ["--replicas=N", "desired pod count"]], "target": "deployment 'web' to 3"},
+    "auto-compose-up": {"tool_label": "docker compose",
+        "why": "Compose runs a whole multi-service app from one YAML file.",
+        "flags": [["up", "create + start services"], ["-d", "detached/background"],
+                  ["down", "stop + remove everything"], ["logs", "view logs"]]},
+    # ---- 5.0 ----
+    "ts-free": {"why": "free summarizes RAM and swap; watch 'available' and swap use.",
+        "flags": [["-h", "human units"], ["-m", "MiB"], ["-g", "GiB"],
+                  ["-s N", "refresh every N seconds"]]},
+    "ts-vmstat": {"why": "vmstat reports memory/CPU/IO; an interval makes it sample repeatedly.",
+        "flags": [["N", "seconds between samples"], ["-w", "wide output"],
+                  ["-s", "one-shot summary"]],
+        "target": "every 2s (read si/so for swap, wa for IO wait)"},
+    "ts-iostat": {"why": "iostat shows per-device disk activity.",
+        "flags": [["-x", "extended columns (%util, await)"], ["-z", "skip idle devices"],
+                  ["-d", "device stats only"], ["N", "interval"]],
+        "target": "per-device, extended"},
+    "ts-ss-listen": {"why": "ss is the modern replacement for netstat.",
+        "flags": [["-t", "TCP"], ["-u", "UDP"], ["-l", "listening only"],
+                  ["-p", "show owning process"], ["-n", "numeric (skip DNS)"],
+                  ["-a", "all states"]],
+        "target": "listening TCP+UDP, numeric, with PIDs"},
+    "ts-ip-addr": {"why": "The ip suite replaced ifconfig.",
+        "flags": [["a / addr", "addresses"], ["link", "interface up/down"],
+                  ["route", "routing table"], ["-br", "brief output"]],
+        "target": "addresses on all interfaces"},
+    "ts-ip-route": {"why": "ip route shows the routing table; the 'default via' line is your gateway.",
+        "flags": [["route / r", "show routes"], ["get IP", "which route a destination uses"]]},
+    "ts-dig": {"why": "dig is the detailed DNS query tool.",
+        "flags": [["NAME", "query an A record"], ["+short", "trim the output"],
+                  ["@SERVER", "ask a specific resolver"], ["NAME MX", "a record type"]],
+        "target": "resolve example.com"},
+    "ts-tcpdump": {"why": "tcpdump captures packets off the wire.",
+        "flags": [["-i IFACE", "the interface"], ["-n", "numeric (no DNS)"],
+                  ["-w FILE", "save a .pcap"], ["port 80 / host X", "capture filters"],
+                  ["-c N", "stop after N packets"]], "target": "interface eth0"},
+    "ts-mtr": {"why": "mtr blends traceroute + ping, probing every hop continuously.",
+        "flags": [["HOST", "the target"], ["-r", "report mode (one batch)"],
+                  ["-w", "wide report"], ["-c N", "number of cycles"]],
+        "target": "8.8.8.8"},
+    "ts-journal-priority": {"why": "Journal priorities run 0 emerg .. 7 debug; filter to surface problems fast.",
+        "flags": [["-p err", "priority err (3) and worse"], ["-p 0..7", "any level"],
+                  ["-b", "limit to this boot"]]},
+    "ts-systemd-blame": {"tool_label": "systemd-analyze",
+        "why": "It ranks units by how long each took to initialize at boot.",
+        "flags": [["blame", "slowest units first"],
+                  ["critical-chain", "the dependency path that actually delayed boot"]]},
+    "ts-lastb": {"tool_label": "lastb",
+        "why": "lastb reads /var/log/btmp to show FAILED logins (last shows successful ones).",
+        "target": "recent failed login attempts"},
+    "ts-uptime": {"why": "uptime prints the 1/5/15-minute load averages.",
+        "target": "compare the averages to your CPU core count (above it = saturation)"},
+}
+
+
+# --------------------------------------------------------------------------- #
 #  Matching engine
 # --------------------------------------------------------------------------- #
 
@@ -1174,6 +1519,7 @@ HELP_TEXT = f"""
   {c(':skip')}     skip to a new scenario
   {c(':stats')}    show your progress
   {c(':menu')}     change which domain you're drilling
+  {c(':level')}    switch difficulty (tutorial / practice / exam)
   {c(':help')}     show this help
   {c(':quit')}     save and exit
 """
@@ -1204,6 +1550,63 @@ def choose_domain():
         if choice.isdigit() and 1 <= int(choice) <= len(DOMAINS):
             return "domain", DOMAINS[int(choice) - 1]
         print(r("  Please pick a number from the list (or 'w')."))
+
+
+DIFF_LABELS = {"tutorial": "Tutorial", "practice": "Practice", "exam": "Exam"}
+
+
+def choose_difficulty():
+    print(f"\n{b('Pick a difficulty:')}")
+    print(f"  {c('1')}  Tutorial  "
+          f"{d('- explains the tool, why, and the flags, then you write it')}")
+    print(f"  {c('2')}  Practice  {d('- scenario + hints on demand (default)')}")
+    print(f"  {c('3')}  Exam      {d('- scenario only, no hints, no scaffolding')}")
+    while True:
+        choice = prompt_line(f"\n{g('level> ')}").strip().lower()
+        if choice == ":quit":
+            return None
+        if choice in ("1", "tutorial", "t"):
+            return "tutorial"
+        if choice in ("", "2", "practice", "p"):
+            return "practice"
+        if choice in ("3", "exam", "e"):
+            return "exam"
+        print(r("  Pick 1, 2, or 3."))
+
+
+def derive_tool(sc):
+    tt = TEACH.get(sc["id"], {})
+    return tt.get("tool_label") or sc["accept"][0].split()[0]
+
+
+def render_teach(sc):
+    """Print the Tutorial briefing for a scenario."""
+    tt = TEACH.get(sc["id"], {})
+    print(f"  {m('--- TUTORIAL ' + '-' * 50)}")
+    print(f"  {b('Tool:')}  {c(derive_tool(sc))}")
+
+    why = tt.get("why") or sc["explain"]
+    wrapped = textwrap.wrap(why, width=66)
+    print(f"  {b('Why:')}   {wrapped[0] if wrapped else why}")
+    for line in wrapped[1:]:
+        print(f"         {line}")
+
+    flags = tt.get("flags")
+    if not flags:  # fall back to flags visible in the canonical answer
+        _, found, _ = split_tokens(sc["accept"][0].split())
+        if found:
+            print(f"  {b('Flags:')} {', '.join(found)}"
+                  f"{d('   (type :hint for what each does)')}")
+    else:
+        print(f"  {b('Flags:')}")
+        for fname, fdesc in flags:
+            pad = " " * max(1, 16 - len(fname))
+            print(f"      {c(fname)}{pad}{fdesc}")
+
+    if tt.get("target"):
+        print(f"  {b('Target:')} {tt['target']}")
+    print(f"  {m('-' * 63)}")
+    print(f"  {b('Now write the command.')}")
 
 
 def filter_scenarios(kind, value, prog):
@@ -1240,14 +1643,19 @@ def show_stats(prog):
     print()
 
 
-def ask_scenario(sc, prog):
-    """Run one scenario to completion. Returns 'next', 'menu', or 'quit'."""
+def ask_scenario(sc, prog, difficulty="practice"):
+    """Run one scenario to completion. Returns 'next','menu','level','quit'."""
     print("\n" + "-" * 70)
-    print(f"{d(sc['domain'])}  {d('|')}  {c(sc['topic'])}")
+    print(f"{d(sc['domain'])}  {d('|')}  {c(sc['topic'])}  "
+          f"{d('. ' + DIFF_LABELS[difficulty])}")
     print(f"\n{b('Scenario:')} {sc['prompt']}\n")
+    if difficulty == "tutorial":
+        render_teach(sc)
+        print()
     hint_idx = 0
     first_attempt = True
     solved_clean = True  # solved without hints/reveal
+    box_cap = 3 if difficulty == "tutorial" else 5
 
     while True:
         ans = prompt_line(f"{g('$ ')}")
@@ -1257,6 +1665,8 @@ def ask_scenario(sc, prog):
             return "quit"
         if cmd in (":menu", ":m"):
             return "menu"
+        if cmd in (":level", ":l"):
+            return "level"
         if cmd in (":help", ":h", "?"):
             print(HELP_TEXT)
             continue
@@ -1267,6 +1677,10 @@ def ask_scenario(sc, prog):
             print(d(f"  (skipped - the answer was: {sc['accept'][0]})"))
             return "next"
         if cmd in (":hint",):
+            if difficulty == "exam":
+                print(d("  Hints are off in Exam mode. Answer it, "
+                        "or :answer to reveal / :skip to pass."))
+                continue
             solved_clean = False
             if hint_idx < len(sc["hints"]):
                 print(f"  {y('hint ' + str(hint_idx + 1) + ':')} "
@@ -1279,7 +1693,6 @@ def ask_scenario(sc, prog):
             solved_clean = False
             print(f"  {y('Answer:')} {b(sc['accept'][0])}")
             print(f"  {d(sc['explain'])}")
-            # count as seen but not correct
             prog["seen"] = prog.get("seen", 0) + 1
             return "next"
 
@@ -1289,7 +1702,7 @@ def ask_scenario(sc, prog):
             prog["correct"] = prog.get("correct", 0) + 1
             if first_attempt and solved_clean:
                 prog["first_try"] = prog.get("first_try", 0) + 1
-                prog["boxes"][sc["id"]] = min(5, box_of(prog, sc["id"]) + 1)
+                prog["boxes"][sc["id"]] = min(box_cap, box_of(prog, sc["id"]) + 1)
                 tag = g("Correct - first try! ")
                 if box_of(prog, sc["id"]) >= 5:
                     tag += m("(mastered)")
@@ -1303,8 +1716,9 @@ def ask_scenario(sc, prog):
         else:
             first_attempt = False
             prog["boxes"][sc["id"]] = 1  # missed -> resurface soon
-            print(f"  {r('Not quite.')} "
-                  f"{d('Try again, or :hint / :answer / :skip')}")
+            tail = (":answer / :skip" if difficulty == "exam"
+                    else ":hint / :answer / :skip")
+            print(f"  {r('Not quite.')} {d('Try again, or ' + tail)}")
 
 
 def run():
@@ -1330,6 +1744,12 @@ def run():
     print(d("  the expected command, so practice freely - your system is untouched."))
     print(HELP_TEXT)
 
+    difficulty = choose_difficulty()
+    if difficulty is None:
+        save_progress(progress_path, prog)
+        print(g("\nSaved. Happy studying!\n"))
+        return
+
     kind, value = choose_domain()
     if kind is None:
         save_progress(progress_path, prog)
@@ -1338,12 +1758,13 @@ def run():
 
     pool = filter_scenarios(kind, value, prog)
     last_id = None
-    print(d(f"\n  Drilling {len(pool)} scenarios. Type :menu to switch, :quit to stop."))
+    print(d(f"\n  {DIFF_LABELS[difficulty]} mode - drilling {len(pool)} scenarios. "
+            f"Type :level / :menu to switch, :quit to stop."))
 
     while True:
         sc = weighted_pick(pool, prog, exclude=last_id if len(pool) > 1 else None)
         last_id = sc["id"]
-        result = ask_scenario(sc, prog)
+        result = ask_scenario(sc, prog, difficulty)
         save_progress(progress_path, prog)
 
         if result == "quit":
@@ -1351,6 +1772,15 @@ def run():
             print(g("Progress saved to ") + d(progress_path))
             print(g("Keep at it - see you next session.\n"))
             return
+        if result == "level":
+            new = choose_difficulty()
+            if new is None:
+                save_progress(progress_path, prog)
+                print(g("\nSaved. Happy studying!\n"))
+                return
+            difficulty = new
+            last_id = None
+            print(d(f"\n  Switched to {DIFF_LABELS[difficulty]} mode."))
         if result == "menu":
             kind, value = choose_domain()
             if kind is None:
@@ -1359,7 +1789,8 @@ def run():
                 return
             pool = filter_scenarios(kind, value, prog)
             last_id = None
-            print(d(f"\n  Drilling {len(pool)} scenarios."))
+            print(d(f"\n  {DIFF_LABELS[difficulty]} mode - "
+                    f"drilling {len(pool)} scenarios."))
 
 
 if __name__ == "__main__":

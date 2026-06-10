@@ -37,7 +37,7 @@ import sys
 import textwrap
 
 # Bump on EVERY delivered change: major.minor.patch
-__version__ = "2.4.0"
+__version__ = "2.4.1"
 
 # --------------------------------------------------------------------------- #
 #  Scenario bank  (all original, written from the published XK0-006 objectives)
@@ -3290,13 +3290,19 @@ def micro_flag_check(fam, missing):
         return
     meaning = _flag_meaning(fam, target)
     print(f"  {m('Quick rep -')} which flag means "
-          f"{b(chr(39) + meaning + chr(39))}?")
+          f"{b(chr(39) + meaning + chr(39))}?  {d('(:skip to pass)')}")
     ans = prompt_line(f"  {g('flag> ')}").strip()
-    if ans.lstrip("-+") == target.lstrip("-+") and ans:
+    if ans in (":quit", ":q"):
+        return "quit"
+    if ans in (":menu", ":m"):
+        return "menu"
+    if (ans.lstrip("-+") == target.lstrip("-+") and ans
+            and not ans.startswith(":")):
         print(f"  {g('● Right:')} {target}. {b('Now the full command:')}")
     else:
         print(f"  {r('●')} {y('It is')} {b(target)} {d('(' + meaning + ')')}. "
               f"{b('Now the full command:')}")
+    return None
 
 
 
@@ -3852,7 +3858,9 @@ def ask_scenario(sc, prog, difficulty="practice"):
             _weak_note(prog, fam, diff["missing"])
             if diff["missing"] and not did_micro:
                 did_micro = True
-                micro_flag_check(fam, diff["missing"])
+                mres = micro_flag_check(fam, diff["missing"])
+                if mres in ("quit", "menu"):
+                    return mres
                 _remind()
                 continue
         print(f"  {d('Try again, or :hint / :answer / :skip')}")
@@ -3973,7 +3981,9 @@ def _pick_numbered(title, items, render):
         ch = prompt_line(f"\n{g('> ')}").strip().lower()
         if ch in (":quit", ":q"):
             return ":quit"
-        if ch in ("0", "b", "back", ":menu", ":m"):
+        if ch in (":menu", ":m"):
+            return ":mainmenu"
+        if ch in ("0", "b", "back"):
             return None
         if ch.isdigit() and 1 <= int(ch) <= len(items):
             return items[int(ch) - 1]
@@ -3987,7 +3997,7 @@ def learn_tool(prog):
         cat = _pick_numbered("GYM - pick a category:", TOOL_CATS, lambda x: x[0])
         if cat == ":quit":
             return "quit"
-        if cat is None:
+        if cat is None or cat == ":mainmenu":
             return "menu"
         catname, subs = cat
         while True:
@@ -3996,6 +4006,8 @@ def learn_tool(prog):
                 lambda x: f"{x[0]}  {d('(' + str(len(x[1])) + ' tools)')}")
             if sub == ":quit":
                 return "quit"
+            if sub == ":mainmenu":
+                return "menu"
             if sub is None:
                 break  # back to categories
             subname, fams = sub
@@ -4008,6 +4020,8 @@ def learn_tool(prog):
                 fam = _pick_numbered(f"{subname} - pick a tool:", fams, _tline)
                 if fam == ":quit":
                     return "quit"
+                if fam == ":mainmenu":
+                    return "menu"
                 if fam is None:
                     break  # back to topics
                 res = _run_learn_flow(fam, prog)
@@ -4031,7 +4045,9 @@ def _run_learn_flow(fam, prog):
             ans = prompt_line(f"  {g('$ ')}").strip()
             if ans in (":quit", ":q"):
                 return "quit"
-            if ans in (":menu", ":m", ":skip", ":n"):
+            if ans in (":menu", ":m"):
+                return "menu"
+            if ans in (":skip", ":n"):
                 break
             if check_answer(ans, {"accept": [cmdtext], "mode": "smart"}):
                 tm["learn"] += 1

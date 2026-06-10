@@ -186,7 +186,7 @@ SCENARIOS = [
         "id": "dev-dmesg", "domain": "1.0 System Management", "topic": "Devices",
         "prompt": "View the kernel ring buffer to read messages about hardware "
                   "detected at boot (human-readable timestamps).",
-        "accept": ["dmesg -T", "dmesg --ctime", "dmesg"],
+        "accept": ["dmesg -T", "dmesg --ctime"],
         "hints": ["Kernel/hardware messages live in the kernel ring buffer.",
                   "The tool is `dmesg`; -T gives readable timestamps.",
                   "dmesg -T"],
@@ -731,7 +731,7 @@ SCENARIOS = [
     {
         "id": "sec-ufw-allow", "domain": "3.0 Security", "topic": "ufw",
         "prompt": "On an Ubuntu host using ufw, allow inbound SSH (port 22/tcp).",
-        "accept": ["ufw allow 22/tcp", "ufw allow ssh", "ufw allow 22"],
+        "accept": ["ufw allow 22/tcp", "ufw allow ssh"],
         "hints": ["Uncomplicated FireWall: ufw.",
                   "ufw allow <port>/<proto> (or the service name).",
                   "ufw allow 22/tcp"],
@@ -891,7 +891,7 @@ SCENARIOS = [
     {
         "id": "ts-free", "domain": "5.0 Troubleshooting", "topic": "Memory",
         "prompt": "Show total, used, and free RAM and swap in human-readable units.",
-        "accept": ["free -h", "free -m", "free -g"],
+        "accept": ["free -h"],
         "hints": ["The memory summary tool is `free`.",
                   "Add -h for human-readable units.",
                   "free -h"],
@@ -912,7 +912,7 @@ SCENARIOS = [
     {
         "id": "ts-iostat", "domain": "5.0 Troubleshooting", "topic": "Disk I/O",
         "prompt": "Report per-device disk I/O statistics with extended details.",
-        "accept": ["iostat -x", "iostat -xz", "iostat"],
+        "accept": ["iostat -x", "iostat -xz"],
         "hints": ["Input/Output STATistics: iostat.",
                   "-x adds the extended per-device columns.",
                   "iostat -x"],
@@ -1374,424 +1374,325 @@ TEACH = {
 
 
 # --------------------------------------------------------------------------- #
-#  Matching engine
+#  Rep drills (Tutorial mode)
+#  After solving a scenario, the learner can keep hammering the SAME tool with
+#  these variations until it sticks.  Keyed by tool; related commands are
+#  grouped via TOOL_ALIASES (docker->podman, pv/vg/lv*->lvm, ...).
+#  drill keys:  q = task   a = accepted answers   h = hint   e = explanation
+#               m = match mode (optional)
 # --------------------------------------------------------------------------- #
 
-def normalize(s, allow_sudo=True):
-    """Strip, collapse whitespace, and optionally drop a leading sudo."""
-    s = s.strip()
-    s = re.sub(r"\s+", " ", s)
-    if allow_sudo and s.startswith("sudo "):
-        s = s[5:].strip()
-    return s
-
-
-def split_tokens(tokens):
-    """Return (head, sorted_flag_list, ordered_operand_list).
-
-    Bundled single-letter short flags (e.g. -tulpn) are expanded so that
-    flag order and bundling don't matter, while operands keep their order.
-    """
-    if not tokens:
-        return "", [], []
-    head = tokens[0]
-    flags, operands = [], []
-    for t in tokens[1:]:
-        if len(t) > 1 and t.startswith("-"):
-            if re.fullmatch(r"-[A-Za-z]{2,}", t):           # -abc -> -a -b -c
-                flags.extend("-" + ch for ch in t[1:])
-            else:                                            # --long, -9, -s, -o=x
-                flags.append(t)
-        else:
-            operands.append(t)
-    return head, sorted(flags), operands
-
-
-def structural_match(user, accept):
-    uh, uf, uo = split_tokens(user.split())
-    ah, af, ao = split_tokens(accept.split())
-    return uh == ah and uf == af and uo == ao
-
-
-def check_answer(user_input, scenario):
-    """Return True if the typed answer satisfies the scenario."""
-    mode = scenario.get("mode", "smart")
-    un = normalize(user_input)
-    if not un:
-        return False
-    for accept in scenario["accept"]:
-        an = normalize(accept)
-        if mode == "exact":
-            if un == an:
-                return True
-        elif mode == "regex":
-            if re.fullmatch(an, un):
-                return True
-        elif mode == "contains":
-            need = an.split()
-            have = un.split()
-            if all(tok in have for tok in need):
-                return True
-        else:  # smart
-            if un == an or structural_match(un, an):
-                return True
-    return False
-
-
-# --------------------------------------------------------------------------- #
-#  Presentation helpers
-# --------------------------------------------------------------------------- #
-
-class C:
-    """ANSI colors, auto-disabled when not a TTY / NO_COLOR / --no-color."""
-    enabled = True
-    GREEN = "\033[92m"; RED = "\033[91m"; YEL = "\033[93m"; CYAN = "\033[96m"
-    DIM = "\033[2m"; BOLD = "\033[1m"; RESET = "\033[0m"; MAG = "\033[95m"
-
-    @classmethod
-    def wrap(cls, code, text):
-        return f"{code}{text}{cls.RESET}" if cls.enabled else text
-
-
-def g(t): return C.wrap(C.GREEN, t)
-def r(t): return C.wrap(C.RED, t)
-def y(t): return C.wrap(C.YEL, t)
-def c(t): return C.wrap(C.CYAN, t)
-def d(t): return C.wrap(C.DIM, t)
-def b(t): return C.wrap(C.BOLD, t)
-def m(t): return C.wrap(C.MAG, t)
-
-
-BANNER = r"""
-  __   _                  _      ____                        _
- | |  (_)_ _ _  ___ __  _| |_   |  _ \  ___  ____ ___    ___ | |
- | |__| | ' \ || \ \ / |_   _|  | |_) |/ _ \|_  // _ \  / _ \| |
- |____|_|_||_\_,_/_\_\   |_|    |____/ \___/ /__|\___/  \___/| |
-                                                            |_|
-        CompTIA Linux+  XK0-006   *  Command Dojo  *  safe & offline
-"""
-
-
-# --------------------------------------------------------------------------- #
-#  Progress (Leitner-style spaced repetition)
-# --------------------------------------------------------------------------- #
-
-PROGRESS_PATH = os.path.expanduser("~/.linuxplus_cmd_trainer.json")
-
-
-def load_progress(path):
-    try:
-        with open(path) as f:
-            return json.load(f)
-    except Exception:
-        return {"boxes": {}, "seen": 0, "correct": 0, "first_try": 0}
-
-
-def save_progress(path, prog):
-    try:
-        with open(path, "w") as f:
-            json.dump(prog, f, indent=2)
-    except Exception:
-        pass  # never let a save failure interrupt studying
-
-
-def box_of(prog, sid):
-    return prog["boxes"].get(sid, 0)  # 0 = never answered correctly
-
-
-def weighted_pick(scenarios, prog, exclude=None):
-    """Pick a scenario, favoring ones in low Leitner boxes (less mastered)."""
-    pool = [s for s in scenarios if s["id"] != exclude] or scenarios
-    weights = [max(1, 6 - box_of(prog, s["id"])) for s in pool]
-    return random.choices(pool, weights=weights, k=1)[0]
-
-
-# --------------------------------------------------------------------------- #
-#  Session
-# --------------------------------------------------------------------------- #
-
-DOMAINS = sorted({s["domain"] for s in SCENARIOS})
-
-HELP_TEXT = f"""
-{b('Commands you can type instead of an answer:')}
-  {c(':hint')}     reveal the next hint (small first, bigger later)
-  {c(':answer')}   give up and show the correct command
-  {c(':skip')}     skip to a new scenario
-  {c(':stats')}    show your progress
-  {c(':menu')}     change which domain you're drilling
-  {c(':level')}    switch difficulty (tutorial / practice / exam)
-  {c(':help')}     show this help
-  {c(':quit')}     save and exit
-"""
-
-
-def prompt_line(text=""):
-    try:
-        return input(text)
-    except (EOFError, KeyboardInterrupt):
-        return ":quit"
-
-
-def choose_domain():
-    print(f"\n{b('What would you like to drill?')}")
-    print(f"  {c('0')}  Everything (all domains)")
-    for i, dom in enumerate(DOMAINS, 1):
-        n = sum(1 for s in SCENARIOS if s["domain"] == dom)
-        print(f"  {c(str(i))}  {dom}  {d('(' + str(n) + ' scenarios)')}")
-    print(f"  {c('w')}  Weak spots only {d('(the ones you keep missing)')}")
-    while True:
-        choice = prompt_line(f"\n{g('select> ')}").strip().lower()
-        if choice == ":quit":
-            return None, None
-        if choice == "w":
-            return "weak", None
-        if choice == "0" or choice == "":
-            return "all", None
-        if choice.isdigit() and 1 <= int(choice) <= len(DOMAINS):
-            return "domain", DOMAINS[int(choice) - 1]
-        print(r("  Please pick a number from the list (or 'w')."))
-
-
-DIFF_LABELS = {"tutorial": "Tutorial", "practice": "Practice", "exam": "Exam"}
-
-
-def choose_difficulty():
-    print(f"\n{b('Pick a difficulty:')}")
-    print(f"  {c('1')}  Tutorial  "
-          f"{d('- explains the tool, why, and the flags, then you write it')}")
-    print(f"  {c('2')}  Practice  {d('- scenario + hints on demand (default)')}")
-    print(f"  {c('3')}  Exam      {d('- scenario only, no hints, no scaffolding')}")
-    while True:
-        choice = prompt_line(f"\n{g('level> ')}").strip().lower()
-        if choice == ":quit":
-            return None
-        if choice in ("1", "tutorial", "t"):
-            return "tutorial"
-        if choice in ("", "2", "practice", "p"):
-            return "practice"
-        if choice in ("3", "exam", "e"):
-            return "exam"
-        print(r("  Pick 1, 2, or 3."))
-
-
-def derive_tool(sc):
-    tt = TEACH.get(sc["id"], {})
-    return tt.get("tool_label") or sc["accept"][0].split()[0]
-
-
-def render_teach(sc):
-    """Print the Tutorial briefing for a scenario."""
-    tt = TEACH.get(sc["id"], {})
-    print(f"  {m('--- TUTORIAL ' + '-' * 50)}")
-    print(f"  {b('Tool:')}  {c(derive_tool(sc))}")
-
-    why = tt.get("why") or sc["explain"]
-    wrapped = textwrap.wrap(why, width=66)
-    print(f"  {b('Why:')}   {wrapped[0] if wrapped else why}")
-    for line in wrapped[1:]:
-        print(f"         {line}")
-
-    flags = tt.get("flags")
-    if not flags:  # fall back to flags visible in the canonical answer
-        _, found, _ = split_tokens(sc["accept"][0].split())
-        if found:
-            print(f"  {b('Flags:')} {', '.join(found)}"
-                  f"{d('   (type :hint for what each does)')}")
-    else:
-        print(f"  {b('Flags:')}")
-        for fname, fdesc in flags:
-            pad = " " * max(1, 16 - len(fname))
-            print(f"      {c(fname)}{pad}{fdesc}")
-
-    if tt.get("target"):
-        print(f"  {b('Target:')} {tt['target']}")
-    print(f"  {m('-' * 63)}")
-    print(f"  {b('Now write the command.')}")
-
-
-def filter_scenarios(kind, value, prog):
-    if kind == "domain":
-        return [s for s in SCENARIOS if s["domain"] == value]
-    if kind == "weak":
-        weak = [s for s in SCENARIOS if box_of(prog, s["id"]) <= 2]
-        return weak if weak else SCENARIOS
-    return SCENARIOS
-
-
-def show_stats(prog):
-    seen, correct = prog.get("seen", 0), prog.get("correct", 0)
-    first = prog.get("first_try", 0)
-    acc = (correct / seen * 100) if seen else 0
-    mastered = sum(1 for v in prog["boxes"].values() if v >= 5)
-    touched = len(prog["boxes"])
-    print(f"\n{b('=== Your progress ===')}")
-    print(f"  Scenarios attempted : {c(str(seen))}")
-    print(f"  Correct             : {g(str(correct))}  "
-          f"({acc:.0f}% of attempts)")
-    print(f"  Solved on first try : {g(str(first))}")
-    print(f"  Mastered (box 5/5)  : {g(str(mastered))} of {len(SCENARIOS)}")
-    print(f"  Unique seen         : {c(str(touched))} of {len(SCENARIOS)}")
-    # per-domain mastery bar
-    print(f"\n  {b('By domain (mastered / total):')}")
-    for dom in DOMAINS:
-        ids = [s["id"] for s in SCENARIOS if s["domain"] == dom]
-        done = sum(1 for sid in ids if box_of(prog, sid) >= 5)
-        total = len(ids)
-        filled = int((done / total) * 20) if total else 0
-        bar = g("#" * filled) + d("-" * (20 - filled))
-        print(f"    {dom[:42]:42} [{bar}] {done}/{total}")
-    print()
-
-
-def ask_scenario(sc, prog, difficulty="practice"):
-    """Run one scenario to completion. Returns 'next','menu','level','quit'."""
-    print("\n" + "-" * 70)
-    print(f"{d(sc['domain'])}  {d('|')}  {c(sc['topic'])}  "
-          f"{d('. ' + DIFF_LABELS[difficulty])}")
-    print(f"\n{b('Scenario:')} {sc['prompt']}\n")
-    if difficulty == "tutorial":
-        render_teach(sc)
-        print()
-    hint_idx = 0
-    first_attempt = True
-    solved_clean = True  # solved without hints/reveal
-    box_cap = 3 if difficulty == "tutorial" else 5
-
-    while True:
-        ans = prompt_line(f"{g('$ ')}")
-        cmd = ans.strip()
-
-        if cmd in (":quit", ":q"):
-            return "quit"
-        if cmd in (":menu", ":m"):
-            return "menu"
-        if cmd in (":level", ":l"):
-            return "level"
-        if cmd in (":help", ":h", "?"):
-            print(HELP_TEXT)
-            continue
-        if cmd in (":stats", ":s"):
-            show_stats(prog)
-            continue
-        if cmd in (":skip", ":n"):
-            print(d(f"  (skipped - the answer was: {sc['accept'][0]})"))
-            return "next"
-        if cmd in (":hint",):
-            if difficulty == "exam":
-                print(d("  Hints are off in Exam mode. Answer it, "
-                        "or :answer to reveal / :skip to pass."))
-                continue
-            solved_clean = False
-            if hint_idx < len(sc["hints"]):
-                print(f"  {y('hint ' + str(hint_idx + 1) + ':')} "
-                      f"{sc['hints'][hint_idx]}")
-                hint_idx += 1
-            else:
-                print(d("  No more hints - type :answer to reveal it."))
-            continue
-        if cmd in (":answer", ":a", ":reveal"):
-            solved_clean = False
-            print(f"  {y('Answer:')} {b(sc['accept'][0])}")
-            print(f"  {d(sc['explain'])}")
-            prog["seen"] = prog.get("seen", 0) + 1
-            return "next"
-
-        # --- it's an answer attempt ---
-        if check_answer(cmd, sc):
-            prog["seen"] = prog.get("seen", 0) + 1
-            prog["correct"] = prog.get("correct", 0) + 1
-            if first_attempt and solved_clean:
-                prog["first_try"] = prog.get("first_try", 0) + 1
-                prog["boxes"][sc["id"]] = min(box_cap, box_of(prog, sc["id"]) + 1)
-                tag = g("Correct - first try! ")
-                if box_of(prog, sc["id"]) >= 5:
-                    tag += m("(mastered)")
-            else:
-                # still good, but it took hints/retries -> keep it coming back
-                prog["boxes"][sc["id"]] = min(2, box_of(prog, sc["id"]) + 1)
-                tag = g("Correct.")
-            print(f"  {tag}")
-            print(f"  {d(sc['explain'])}")
-            return "next"
-        else:
-            first_attempt = False
-            prog["boxes"][sc["id"]] = 1  # missed -> resurface soon
-            tail = (":answer / :skip" if difficulty == "exam"
-                    else ":hint / :answer / :skip")
-            print(f"  {r('Not quite.')} {d('Try again, or ' + tail)}")
-
-
-def run():
-    # ---- args ----
-    args = sys.argv[1:]
-    progress_path = PROGRESS_PATH
-    if "--no-color" in args or os.environ.get("NO_COLOR") or not sys.stdout.isatty():
-        C.enabled = False
-    if "--progress" in args:
-        i = args.index("--progress")
-        if i + 1 < len(args):
-            progress_path = os.path.expanduser(args[i + 1])
-    if "--reset" in args:
-        try:
-            os.remove(progress_path)
-        except OSError:
-            pass
-
-    prog = load_progress(progress_path)
-
-    print(c(BANNER))
-    print(d("  Nothing you type is executed. This only checks your answer against"))
-    print(d("  the expected command, so practice freely - your system is untouched."))
-    print(HELP_TEXT)
-
-    difficulty = choose_difficulty()
-    if difficulty is None:
-        save_progress(progress_path, prog)
-        print(g("\nSaved. Happy studying!\n"))
-        return
-
-    kind, value = choose_domain()
-    if kind is None:
-        save_progress(progress_path, prog)
-        print(g("\nSaved. Happy studying!\n"))
-        return
-
-    pool = filter_scenarios(kind, value, prog)
-    last_id = None
-    print(d(f"\n  {DIFF_LABELS[difficulty]} mode - drilling {len(pool)} scenarios. "
-            f"Type :level / :menu to switch, :quit to stop."))
-
-    while True:
-        sc = weighted_pick(pool, prog, exclude=last_id if len(pool) > 1 else None)
-        last_id = sc["id"]
-        result = ask_scenario(sc, prog, difficulty)
-        save_progress(progress_path, prog)
-
-        if result == "quit":
-            show_stats(prog)
-            print(g("Progress saved to ") + d(progress_path))
-            print(g("Keep at it - see you next session.\n"))
-            return
-        if result == "level":
-            new = choose_difficulty()
-            if new is None:
-                save_progress(progress_path, prog)
-                print(g("\nSaved. Happy studying!\n"))
-                return
-            difficulty = new
-            last_id = None
-            print(d(f"\n  Switched to {DIFF_LABELS[difficulty]} mode."))
-        if result == "menu":
-            kind, value = choose_domain()
-            if kind is None:
-                save_progress(progress_path, prog)
-                print(g("\nSaved. Happy studying!\n"))
-                return
-            pool = filter_scenarios(kind, value, prog)
-            last_id = None
-            print(d(f"\n  {DIFF_LABELS[difficulty]} mode - "
-                    f"drilling {len(pool)} scenarios."))
-
-
-if __name__ == "__main__":
-    run()
+TOOL_ALIASES = {
+    "docker": "podman", "killall": "kill", "pkill": "kill",
+    "gunzip": "gzip", "zcat": "gzip", "zgrep": "gzip",
+    "yum": "dnf", "apt-get": "apt",
+    "nslookup": "dig", "host": "dig",
+    "rmmod": "modprobe", "insmod": "modprobe", "lsmod": "modprobe",
+    "modinfo": "modprobe", "depmod": "modprobe",
+    "pvcreate": "lvm", "vgcreate": "lvm", "vgextend": "lvm",
+    "lvcreate": "lvm", "lvextend": "lvm", "lvremove": "lvm",
+    "pvs": "lvm", "vgs": "lvm", "lvs": "lvm",
+    "umount": "mount",
+    "usermod": "useradd", "userdel": "useradd", "passwd": "useradd",
+    "chage": "useradd",
+    "setenforce": "selinux", "restorecon": "selinux", "setsebool": "selinux",
+    "getenforce": "selinux", "chcon": "selinux", "getsebool": "selinux",
+    "ssh-copy-id": "ssh-keygen", "ssh": "ssh-keygen",
+    "mkinitrd": "dracut", "update-initramfs": "dracut",
+    "resize2fs": "fsresize", "xfs_growfs": "fsresize",
+    "getfacl": "setfacl", "lsattr": "chattr", "chgrp": "chown",
+    "ansible-playbook": "ansible",
+    "mkfs.ext4": "mkfs", "mkfs.xfs": "mkfs",
+}
+
+
+def drill_key(sc):
+    """Map a scenario to its drill-bank key (its tool family)."""
+    toks = sc["accept"][0].split()
+    if toks[0] in ("docker", "podman") and len(toks) > 1 and toks[1] == "compose":
+        return "compose"
+    if toks[0] == "docker-compose":
+        return "compose"
+    return TOOL_ALIASES.get(toks[0], toks[0])
+
+
+DRILLS = {
+    "journalctl": [
+        {"q": "Follow the journal live (stream new entries).",
+         "a": ["journalctl -f", "journalctl --follow"], "h": "Like tail -f.",
+         "e": "-f follows live."},
+        {"q": "Show only kernel messages from the journal.",
+         "a": ["journalctl -k", "journalctl --dmesg"], "h": "k for kernel.",
+         "e": "-k limits to the kernel transport (like dmesg)."},
+        {"q": "Show the journal from the PREVIOUS boot.",
+         "a": ["journalctl -b -1"], "h": "-b takes an offset.",
+         "e": "-b -1 = one boot back; -b alone = current boot."},
+        {"q": "Show entries for the nginx unit, current boot only.",
+         "a": ["journalctl -u nginx -b", "journalctl -b -u nginx",
+               "journalctl -u nginx.service -b"],
+         "h": "-u for unit, -b for boot.", "e": "Combine -u and -b freely."},
+        {"q": "Show only warning-priority messages and worse.",
+         "a": ["journalctl -p warning", "journalctl -p 4", "journalctl -p warn"],
+         "h": "-p takes a priority name or number.",
+         "e": "warning = level 4; err = 3; crit = 2."},
+        {"q": "Show just the last 50 journal lines.",
+         "a": ["journalctl -n 50"], "h": "Same letter tail uses for line count.",
+         "e": "-n N starts from the last N entries."},
+    ],
+    "systemctl": [
+        {"q": "Restart the sshd service.",
+         "a": ["systemctl restart sshd", "systemctl restart sshd.service"],
+         "h": "The verb is restart.", "e": "restart = stop + start."},
+        {"q": "Stop the nginx service (just for now).",
+         "a": ["systemctl stop nginx", "systemctl stop nginx.service"],
+         "h": "stop affects now; disable affects boot.",
+         "e": "stop only affects the running instance."},
+        {"q": "Stop the cups service from starting at boot (but allow manual starts).",
+         "a": ["systemctl disable cups", "systemctl disable cups.service"],
+         "h": "Not mask - it should still be startable.",
+         "e": "disable removes boot-start; mask would block it entirely."},
+        {"q": "Check whether httpd is set to start at boot.",
+         "a": ["systemctl is-enabled httpd", "systemctl is-enabled httpd.service"],
+         "h": "is-...", "e": "is-enabled prints enabled/disabled; is-active checks now."},
+        {"q": "List all units that have FAILED.",
+         "a": ["systemctl --failed", "systemctl list-units --failed",
+               "systemctl list-units --state=failed"],
+         "h": "There's a --failed shortcut.",
+         "e": "A quick health check after boot or an incident."},
+        {"q": "Undo a mask on the bluetooth service.",
+         "a": ["systemctl unmask bluetooth", "systemctl unmask bluetooth.service"],
+         "h": "The opposite of mask.", "e": "unmask removes the /dev/null link."},
+        {"q": "Reload nginx's configuration without dropping connections.",
+         "a": ["systemctl reload nginx", "systemctl reload nginx.service"],
+         "h": "Not restart - gentler.",
+         "e": "reload signals the service to re-read config; restart kills it."},
+    ],
+    "tar": [
+        {"q": "LIST the contents of backup.tar.gz without extracting.",
+         "a": ["tar -tzf backup.tar.gz", "tar tzf backup.tar.gz",
+               "tar -tzvf backup.tar.gz", "tar tzvf backup.tar.gz"],
+         "h": "t = table of contents.", "e": "-t lists; -x extracts."},
+        {"q": "Extract site.tar.gz into /tmp instead of the current dir.",
+         "a": ["tar -xzf site.tar.gz -C /tmp", "tar xzf site.tar.gz -C /tmp"],
+         "h": "-C changes the target directory.",
+         "e": "-C DIR extracts somewhere else."},
+        {"q": "Create a bzip2-compressed archive logs.tar.bz2 of /var/log.",
+         "a": ["tar -cjf logs.tar.bz2 /var/log", "tar cjf logs.tar.bz2 /var/log",
+               "tar -cjvf logs.tar.bz2 /var/log", "tar cjvf logs.tar.bz2 /var/log"],
+         "h": "bzip2 is -j (gzip is -z).", "e": "-j = bzip2, -z = gzip, -J = xz."},
+        {"q": "Extract the xz-compressed archive data.tar.xz.",
+         "a": ["tar -xJf data.tar.xz", "tar xJf data.tar.xz"],
+         "h": "xz uses capital J.", "e": "-J handles .xz archives."},
+        {"q": "Create an UNcompressed archive home.tar of /home.",
+         "a": ["tar -cf home.tar /home", "tar cf home.tar /home",
+               "tar -cvf home.tar /home", "tar cvf home.tar /home"],
+         "h": "Just create + file, no compression flag.",
+         "e": "Without -z/-j/-J tar archives without compressing."},
+    ],
+    "gzip": [
+        {"q": "Decompress huge.log.gz back to huge.log.",
+         "a": ["gunzip huge.log.gz", "gzip -d huge.log.gz"],
+         "h": "gunzip, or gzip with a flag.", "e": "gunzip = gzip -d."},
+        {"q": "Compress report.txt but KEEP the original file too.",
+         "a": ["gzip -k report.txt"], "h": "k for keep.",
+         "e": "-k keeps the original instead of replacing it."},
+        {"q": "View the contents of notes.txt.gz WITHOUT decompressing it.",
+         "a": ["zcat notes.txt.gz", "zless notes.txt.gz"],
+         "h": "There's a z-flavored cat.", "e": "zcat/zless/zgrep read .gz directly."},
+        {"q": "Search for 'error' inside app.log.gz without unpacking it.",
+         "a": ["zgrep error app.log.gz", "zgrep 'error' app.log.gz"],
+         "h": "z + grep.", "e": "zgrep greps compressed files in place."},
+    ],
+    "grep": [
+        {"q": "Show lines of app.log that do NOT contain 'debug'.",
+         "a": ["grep -v debug app.log", "grep -v 'debug' app.log"],
+         "h": "Invert the match.", "e": "-v inverts: print non-matching lines."},
+        {"q": "COUNT how many lines in auth.log contain 'fail'.",
+         "a": ["grep -c fail auth.log", "grep -c 'fail' auth.log"],
+         "h": "c for count.", "e": "-c prints a count instead of the lines."},
+        {"q": "Find 'root' in /etc/passwd, showing line numbers.",
+         "a": ["grep -n root /etc/passwd"], "h": "n for numbers.",
+         "e": "-n prefixes each match with its line number."},
+        {"q": "Recursively list ONLY the filenames under src that contain 'TODO'.",
+         "a": ["grep -rl TODO src", "grep -lr TODO src", "grep -rl 'TODO' src"],
+         "h": "-l lists files; combine with -r.",
+         "e": "-l suppresses the matching text, printing filenames once."},
+        {"q": "Show each match of 'panic' in syslog WITH 2 lines of context around it.",
+         "a": ["grep -C 2 panic syslog", "grep -C2 panic syslog"],
+         "h": "There are context flags: -A after, -B before, -C both.",
+         "e": "-C 2 shows 2 lines before AND after each match."},
+    ],
+    "find": [
+        {"q": "Find every DIRECTORY named 'cache' starting from /.",
+         "a": ["find / -type d -name cache", "find / -name cache -type d",
+               "find / -type d -name 'cache'"],
+         "h": "-type d filters to directories.", "e": "-type d = dirs, f = files."},
+        {"q": "Find files under /etc modified in the last 7 days.",
+         "a": ["find /etc -mtime -7", "find /etc -type f -mtime -7"],
+         "h": "-mtime in days; minus means 'less than'.",
+         "e": "-mtime -7 = modified < 7 days ago; +7 = older than 7."},
+        {"q": "Find empty files in /tmp.",
+         "a": ["find /tmp -type f -empty", "find /tmp -empty -type f",
+               "find /tmp -empty"],
+         "h": "There's an -empty test.", "e": "-empty matches zero-length files/dirs."},
+        {"q": "Find all files owned by the user bob, system-wide.",
+         "a": ["find / -user bob"], "h": "-user.",
+         "e": "-user filters by owner; -group by group."},
+        {"q": "Find the file named 'hosts' anywhere under /etc.",
+         "a": ["find /etc -name hosts", "find /etc -type f -name hosts",
+               "find /etc -name hosts -type f"],
+         "h": "-name matches the filename.",
+         "e": "-name does exact-name matching; -iname ignores case."},
+    ],
+    "chmod": [
+        {"q": "Set notes.txt to rw for owner, read-only for group and others (octal).",
+         "a": ["chmod 644 notes.txt"], "h": "rw=6, r=4.",
+         "e": "644 = rw- r-- r--, the classic file default."},
+        {"q": "Remove write permission from group AND others on secret.txt (symbolic).",
+         "a": ["chmod go-w secret.txt"], "h": "Combine who letters: go.",
+         "e": "go-w strips write from group and other in one shot."},
+        {"q": "Recursively set /srv/app to 750.",
+         "a": ["chmod -R 750 /srv/app", "chmod 750 -R /srv/app"],
+         "h": "-R recurses.", "e": "750 = rwx r-x ---."},
+        {"q": "Set /usr/local/bin/tool to 755 WITH the setuid bit (octal).",
+         "a": ["chmod 4755 /usr/local/bin/tool"],
+         "h": "A 4th leading digit: setuid=4, setgid=2, sticky=1.",
+         "e": "4755: the leading 4 is setuid - it runs as the file's owner."},
+        {"q": "Put the sticky bit on the shared dir /shared with full 777 perms (octal).",
+         "a": ["chmod 1777 /shared"],
+         "h": "Sticky = leading 1.",
+         "e": "1777 like /tmp: everyone writes, only owners delete their files."},
+    ],
+    "chown": [
+        {"q": "Recursively give /srv/web to user www-data, group www-data.",
+         "a": ["chown -R www-data:www-data /srv/web",
+               "chown www-data:www-data -R /srv/web"],
+         "h": "user:group plus recursion.", "e": "-R applies down the whole tree."},
+        {"q": "Change ONLY the group of data.db to 'dba'.",
+         "a": ["chgrp dba data.db", "chown :dba data.db"],
+         "h": "chgrp, or chown with an empty user part.",
+         "e": "chown :group changes group only - same as chgrp."},
+        {"q": "Make alice the owner of report.txt (leave the group alone).",
+         "a": ["chown alice report.txt"], "h": "Just the user, no colon.",
+         "e": "Without :group, only the owner changes."},
+    ],
+    "kill": [
+        {"q": "Politely ask PID 3300 to terminate (default signal).",
+         "a": ["kill 3300", "kill -15 3300", "kill -TERM 3300"],
+         "h": "No -9 needed - the default is TERM.",
+         "e": "Plain kill sends SIGTERM (15), the clean-shutdown signal."},
+        {"q": "Send HUP to PID 812 so the daemon reloads its config.",
+         "a": ["kill -1 812", "kill -HUP 812", "kill -s HUP 812", "kill -s 1 812"],
+         "h": "HUP is signal 1.",
+         "e": "Many daemons re-read config on SIGHUP (1)."},
+        {"q": "Force-kill every process named 'chrome'.",
+         "a": ["killall -9 chrome", "pkill -9 chrome"],
+         "h": "By name, with the KILL signal.",
+         "e": "killall/pkill accept signals just like kill."},
+        {"q": "Kill ALL processes belonging to the user bob.",
+         "a": ["pkill -u bob", "pkill -KILL -u bob", "killall -u bob"],
+         "h": "pkill can target a user.",
+         "e": "-u filters by user - careful, it hits everything they run."},
+    ],
+    "ss": [
+        {"q": "Show listening TCP sockets only, numeric ports.",
+         "a": ["ss -tln", "ss -ltn", "ss -nlt", "ss -t -l -n"],
+         "h": "Drop the u and p this time.", "e": "-t TCP, -l listening, -n numeric."},
+        {"q": "Show a one-screen summary of socket statistics.",
+         "a": ["ss -s"], "h": "s for summary.",
+         "e": "-s totals sockets by state - a fast load check."},
+        {"q": "Show listening UDP sockets, numeric.",
+         "a": ["ss -uln", "ss -lun", "ss -nlu", "ss -u -l -n"],
+         "h": "u instead of t.", "e": "-u selects UDP."},
+    ],
+    "ip": [
+        {"q": "Bring the interface eth0 UP.",
+         "a": ["ip link set eth0 up", "ip link set dev eth0 up"],
+         "h": "It's a link operation.", "e": "ip link set <dev> up/down toggles state."},
+        {"q": "Add the address 192.168.1.50/24 to eth0.",
+         "a": ["ip addr add 192.168.1.50/24 dev eth0",
+               "ip a add 192.168.1.50/24 dev eth0",
+               "ip address add 192.168.1.50/24 dev eth0"],
+         "h": "addr add ... dev ...", "e": "Runtime only - persists via netplan/NM."},
+        {"q": "Show all interfaces in BRIEF one-line-each format.",
+         "a": ["ip -br a", "ip -br addr", "ip -br address", "ip -brief a",
+               "ip -brief addr"],
+         "h": "There's a -br output mode.", "e": "-br is great for quick scans."},
+        {"q": "Show the ARP/neighbor table.",
+         "a": ["ip neigh", "ip n", "ip neighbor", "ip neighbour", "ip neigh show"],
+         "h": "Neighbors.", "e": "ip neigh replaced the old arp command."},
+        {"q": "Add a default route via gateway 10.0.0.1.",
+         "a": ["ip route add default via 10.0.0.1", "ip r add default via 10.0.0.1"],
+         "h": "route add default via ...",
+         "e": "The default route is where non-local traffic goes."},
+    ],
+    "podman": [
+        {"q": "Stop the running container named 'web'.",
+         "a": ["podman stop web", "docker stop web"], "h": "The verb is stop.",
+         "e": "stop sends TERM, then KILL after a grace period."},
+        {"q": "Delete the stopped container 'web'.",
+         "a": ["podman rm web", "docker rm web"], "h": "rm for containers.",
+         "e": "rm removes a container; rmi removes an IMAGE."},
+        {"q": "List the container images stored locally.",
+         "a": ["podman images", "docker images", "podman image ls",
+               "docker image ls"],
+         "h": "images (plural).", "e": "Shows repo, tag, ID, and size."},
+        {"q": "Download the nginx image from a registry without running it.",
+         "a": ["podman pull nginx", "docker pull nginx",
+               "podman pull nginx:latest", "docker pull nginx:latest"],
+         "h": "The verb is pull.", "e": "pull fetches; run would pull AND start."},
+        {"q": "Run 'myapp' detached with the environment variable MODE=prod.",
+         "a": ["podman run -d -e MODE=prod myapp", "docker run -d -e MODE=prod myapp",
+               "podman run -e MODE=prod -d myapp", "docker run -e MODE=prod -d myapp"],
+         "h": "-e KEY=VALUE.", "e": "-e injects environment variables."},
+        {"q": "Run 'db' detached, mounting host /data into the container at /var/lib/data.",
+         "a": ["podman run -d -v /data:/var/lib/data db",
+               "docker run -d -v /data:/var/lib/data db",
+               "podman run -v /data:/var/lib/data -d db",
+               "docker run -v /data:/var/lib/data -d db"],
+         "h": "-v host:container.", "e": "-v maps a volume host-path:container-path."},
+        {"q": "Show the full JSON details of the container 'web'.",
+         "a": ["podman inspect web", "docker inspect web"],
+         "h": "The verb is inspect.", "e": "inspect dumps config, network, mounts."},
+    ],
+    "compose": [
+        {"q": "Tear down the whole Compose application (stop + remove).",
+         "a": ["docker compose down", "docker-compose down"],
+         "h": "The opposite of up.", "e": "down stops and removes services/networks."},
+        {"q": "View the logs of all Compose services.",
+         "a": ["docker compose logs", "docker-compose logs"],
+         "h": "Same word as the container command.", "e": "Add -f to follow live."},
+        {"q": "List the running Compose services.",
+         "a": ["docker compose ps", "docker-compose ps"],
+         "h": "Like container ps, but via compose.",
+         "e": "Shows each service's state and ports."},
+    ],
+    "lvm": [
+        {"q": "List all LOGICAL volumes (short summary).",
+         "a": ["lvs", "lvdisplay"], "h": "Two letters + s.",
+         "e": "lvs is the compact list; lvdisplay the verbose one."},
+        {"q": "List all VOLUME GROUPS (short summary).",
+         "a": ["vgs", "vgdisplay"], "h": "Same pattern, vg.",
+         "e": "vgs shows size, free space, PV/LV counts."},
+        {"q": "List all PHYSICAL volumes (short summary).",
+         "a": ["pvs", "pvdisplay"], "h": "Same pattern, pv.",
+         "e": "pvs shows each disk's VG membership and free space."},
+        {"q": "Add the new disk /dev/sdc into the existing volume group 'datavg'.",
+         "a": ["vgextend datavg /dev/sdc"], "h": "Extend the VG.",
+         "e": "vgextend grows the pool; pvcreate the disk first."},
+        {"q": "Delete the logical volume 'old' from volume group 'datavg'.",
+         "a": ["lvremove /dev/datavg/old", "lvremove datavg/old"],
+         "h": "lvremove takes the LV path.", "e": "Destroys the LV and its data."},
+        {"q": "Create LV 'big' in 'datavg' using ALL remaining free space.",
+         "a": ["lvcreate -l 100%FREE -n big datavg",
+               "lvcreate -n big -l 100%FREE datavg"],
+         "h": "Lowercase -l with a percentage.",
+         "e": "-l 100%FREE allocates by extents; -L takes fixed sizes."},
+    ],
+    "mount": [
+        {"q": "Remount the already-mounted /data as read-write.",
+         "a": ["mount -o remount,rw /data"], "h": "remount,rw in one -o.",
+         "e": "remount changes options without unmounting."},
+        {"q": "Unmount the filesystem at /mnt/usb.",
+         "a": ["umount /mnt/usb"], "h": "Note: umount, not unmount.",
+         "e": "umount detaches; fails

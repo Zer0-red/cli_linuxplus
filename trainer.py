@@ -37,7 +37,7 @@ import sys
 import textwrap
 
 # Bump on EVERY delivered change: major.minor.patch
-__version__ = "2.4.1"
+__version__ = "2.5.1"
 
 # --------------------------------------------------------------------------- #
 #  Scenario bank  (all original, written from the published XK0-006 objectives)
@@ -2476,6 +2476,60 @@ DRILLS = {
          "a": ["visudo -f /etc/sudoers.d/devs"], "h": "-f picks the file.",
          "e": "-f applies visudo's locking and checking to any sudoers file."},
     ],
+    "tail": [
+        {"q": "Show the last 50 lines of syslog.",
+         "a": ["tail -n 50 syslog", "tail -50 syslog", "tail -n50 syslog"],
+         "h": "-n sets the line count.", "e": "-n N shows the last N lines."},
+    ],
+    "cut": [
+        {"q": "Print fields 1 AND 3 of the comma-separated users.csv.",
+         "a": ["cut -d, -f1,3 users.csv", "cut -f1,3 -d, users.csv"],
+         "h": "Comma delimiter, comma-separated field list.",
+         "e": "-f takes lists (1,3) and ranges (1-3)."},
+        {"q": "Print only the first 8 characters of every line of ids.txt.",
+         "a": ["cut -c1-8 ids.txt", "cut -c 1-8 ids.txt"],
+         "h": "Cut by characters, not fields.",
+         "e": "-c selects character positions; no delimiter needed."},
+    ],
+    "sed": [
+        {"q": "Replace http with https IN PLACE in site.conf (edit the file).",
+         "a": ["sed -i 's/http/https/g' site.conf",
+               'sed -i "s/http/https/g" site.conf',
+               "sed -i s/http/https/g site.conf"],
+         "h": "One flag makes the edit stick.",
+         "e": "-i writes the change back to the file (use -i.bak to keep a backup)."},
+        {"q": "Print ONLY line 5 of config.txt.",
+         "a": ["sed -n '5p' config.txt", 'sed -n "5p" config.txt',
+               "sed -n 5p config.txt"],
+         "h": "-n suppresses auto-print; 5p prints line 5.",
+         "e": "sed -n 'Np' is the classic print-one-line idiom."},
+    ],
+    "curl": [
+        {"q": "Download https://example.com and save it to page.html.",
+         "a": ["curl -o page.html https://example.com",
+               "curl https://example.com -o page.html"],
+         "h": "-o names the output file.",
+         "e": "-o saves the body; -O keeps the remote filename."},
+    ],
+    "dd": [
+        {"q": "Restore the image disk.img back ONTO the disk /dev/sdb (4M blocks).",
+         "a": ["dd if=disk.img of=/dev/sdb bs=4M",
+               "dd if=disk.img of=/dev/sdb bs=4M status=progress"],
+         "h": "Same dd - just swap which side is if= and of=.",
+         "e": "if= reads the image, of= writes the device. Reversed = disaster."},
+    ],
+    "iptables": [
+        {"q": "Append an INPUT rule accepting TCP traffic to port 8080.",
+         "a": ["iptables -A INPUT -p tcp --dport 8080 -j ACCEPT"],
+         "h": "-A chain, -p proto, --dport port, -j target.",
+         "e": "-A appends; -j ACCEPT is the verdict. -D with the same spec deletes it."},
+    ],
+    "sudo": [
+        {"q": "Run the command whoami as the user postgres (via sudo).",
+         "a": ["sudo -u postgres whoami"],
+         "h": "-u picks the target user.",
+         "e": "sudo -u USER runs one command as that user instead of root."},
+    ],
     "lastb": [
         {"q": "Show the last 10 SUCCESSFUL logins.",
          "a": ["last -n 10", "last -10"], "h": "last (no b) + a count.",
@@ -2814,7 +2868,8 @@ FLAG_INFO = {
     "find": {"-name": "match filename", "-type": "entry type",
              "-size": "by size", "-mtime": "by modify age",
              "-user": "by owner", "-perm": "by permissions",
-             "-empty": "empty entries", "-delete": "delete matches"},
+             "-empty": "empty entries", "-delete": "delete matches",
+             "-4000": "the SUID bit (as a -perm value)"},
     "kill": {"-9": "SIGKILL (force)", "-15": "SIGTERM (polite)",
              "-1": "SIGHUP (reload)", "-KILL": "SIGKILL (force)",
              "-TERM": "SIGTERM (polite)", "-HUP": "SIGHUP (reload)",
@@ -2868,7 +2923,8 @@ FLAG_INFO = {
     "fsck": {"-y": "auto-yes repairs", "-n": "report only", "-f": "force check"},
     "lsof": {"-i": "network sockets", "-p": "by PID", "-u": "by user"},
     "uptime": {"-p": "pretty duration", "-s": "boot timestamp"},
-    "sort": {"-n": "numeric", "-r": "reverse", "-u": "unique"},
+    "sort": {"-n": "numeric", "-r": "reverse", "-u": "unique",
+             "-c": "prefix a count (uniq -c)"},
     "gzip": {"-d": "decompress", "-k": "keep original",
              "-9": "max compression"},
     "ps": {"-e": "every process", "-f": "full format", "-u": "by user",
@@ -2876,11 +2932,12 @@ FLAG_INFO = {
     "renice": {"-n": "nice value", "-p": "target PID"},
     "mkfs": {"-t": "fs type", "-L": "label"},
     "ip": {"-br": "brief output", "-brief": "brief output"},
-    "ufw": {}, "systemctl": {}, "apt": {}, "dnf": {}, "git": {},
-    "kubectl": {}, "ansible": {}, "compose": {}, "dig": {},
+    "ufw": {}, "systemctl": {"--now": "also start/stop immediately", "--failed": "only failed units"}, "apt": {}, "dnf": {}, "git": {"-m": "commit message", "--oneline": "one line per commit"},
+    "kubectl": {"-f": "manifest file", "--replicas": "desired pod count"}, "ansible": {"-m": "module to run", "-a": "module arguments", "--check": "dry run"}, "compose": {"-d": "detached (background)"},
+    "dig": {"+short": "terse answer only"},
     "chattr": {"+i": "immutable", "-i": "clear immutable",
                "+a": "append-only"},
-    "fsresize": {}, "virsh": {}, "visudo": {"-c": "syntax check",
+    "fsresize": {}, "virsh": {"--all": "include powered-off VMs"}, "visudo": {"-c": "syntax check",
                                             "-f": "target file"},
     "lastb": {"-n": "row limit"}, "nohup": {},
     "systemd-analyze": {}, "lsblk": {"-f": "filesystems/UUIDs",
@@ -2897,7 +2954,8 @@ FLAG_INFO = {
     "head": {"-n": "line count"},
     "tail": {"-f": "follow live", "-F": "follow + survive rotation",
              "-n": "line count"},
-    "cut": {"-d": "delimiter", "-f": "field number"},
+    "cut": {"-d": "delimiter", "-f": "field number",
+            "-c": "character positions"},
     "wc": {"-l": "lines", "-w": "words", "-c": "bytes"},
     "tee": {"-a": "append"},
     "sed": {"-i": "edit in place", "-n": "suppress auto-print"},
@@ -2914,14 +2972,15 @@ FLAG_INFO = {
     "sysctl": {"-w": "write a value", "-a": "show all"},
     "timedatectl": {}, "hostnamectl": {},
     "groupadd": {}, "getent": {}, "who": {}, "top": {},
-    "umask": {}, "su": {}, "sudo": {"-i": "root login shell",
+    "umask": {}, "su": {"-": "login shell (full root env)"}, "sudo": {"-i": "root login shell",
                                     "-s": "shell, keep env",
                                     "-u": "run as user"},
     "semanage": {"-a": "add", "-t": "SELinux type", "-p": "protocol",
                  "-l": "list"},
     "iptables": {"-L": "list rules", "-n": "numeric (no DNS)",
                  "-v": "verbose counters", "-A": "append rule",
-                 "-D": "delete rule"},
+                 "-D": "delete rule", "-p": "protocol",
+                 "--dport": "destination port", "-j": "jump to target"},
     "nft": {},
     "dd": {}, "bzip2": {"-d": "decompress", "-k": "keep original"},
     "xz": {"-d": "decompress", "-k": "keep original"},
@@ -3206,7 +3265,12 @@ Done. (output also written to deploy.log)""",
 
 def _flag_meaning(fam, tok):
     info = FLAG_INFO.get(fam, {})
-    return info.get(tok) or info.get(tok.split("=")[0])
+    hit = info.get(tok) or info.get(tok.split("=")[0])
+    if hit:
+        return hit
+    if len(tok) > 2 and tok.startswith("-") and not tok.startswith("--"):
+        return info.get(tok[:2])      # -d: -f1 -n50 -> -d -f -n
+    return None
 
 
 def flag_diff(user_cmd, accepts, fam):
@@ -3531,7 +3595,7 @@ def derive_tool(sc):
     return tt.get("tool_label") or sc["accept"][0].split()[0]
 
 
-def render_teach(sc):
+def render_teach(sc, ask=True):
     """Print the Tutorial briefing for a scenario."""
     tt = TEACH.get(sc["id"], {})
     print(f"  {m('--- TUTORIAL ' + '-' * 50)}")
@@ -3558,7 +3622,8 @@ def render_teach(sc):
     if tt.get("target"):
         print(f"  {b('Target:')} {tt['target']}")
     print(f"  {m('-' * 63)}")
-    print(f"  {b('Now write the command.')}")
+    if ask:
+        print(f"  {b('Now write the command.')}")
 
 
 def run_drill(dr, prog, tool, rep):
@@ -4030,34 +4095,69 @@ def learn_tool(prog):
                 touched = set(prog.get("fam", {}))
 
 
+def _learn_examples(fam):
+    """Goal/command/why triples: the tool's scenarios + its drill variations."""
+    items = []
+    for s in fam_scenarios(fam)[:2]:
+        inst, _, _ = instantiate(s)
+        items.append((inst["prompt"], inst["accept"][0], inst.get("explain")))
+    for dr in DRILLS.get(fam, [])[:3]:
+        items.append((dr["q"], dr["a"][0], dr.get("e")))
+    # drop duplicate commands (a drill can mirror a scenario)
+    seen, out = set(), []
+    for goal, cmd, why in items:
+        key = normalize(cmd)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((goal, cmd, why))
+    return out[:4]
+
+
 def _run_learn_flow(fam, prog):
     pool = fam_scenarios(fam)
     sc0, _, _ = instantiate(pool[0])
     print(f"\n{b('=== Learning: ' + fam + ' ===')}")
-    render_teach(sc0)
-    cmds = [sc0["accept"][0]]
-    for dr in DRILLS.get(fam, [])[:1]:
-        cmds.append(dr["a"][0])
+    render_teach(sc0, ask=False)
     tm = _toolmode(prog, fam)
-    for cmdtext in cmds[:2]:
-        print(f"\n  {b('Copy this command:')}  {c(cmdtext)}")
+    examples = _learn_examples(fam)
+    total = len(examples)
+    for i, (goal, cmd, why) in enumerate(examples, 1):
+        print(f"\n  {d('─' * 56)}")
+        print(f"  {m('Example ' + str(i) + ' of ' + str(total))}")
+        print(f"  {c('>>')} {b('Goal:')} {goal}")
+        print(f"  {b('How:')}  {c(cmd)}")
+        flags = [tok for tok in normalize(cmd).split()[1:]
+                 if tok.startswith("-") or tok.startswith("+")]
+        for fl in flags:
+            mn = _flag_meaning(fam, fl)
+            pad = " " * max(2, 14 - len(fl))
+            line = f"          {c(fl)}{pad}"
+            if mn:
+                line += d("-> " + mn)
+            print(line)
+        if why:
+            print(f"  {d('Result: ' + why)}")
+        print(f"  {b('Type it to lock it in:')}")
         while True:
             ans = prompt_line(f"  {g('$ ')}").strip()
+            if not ans:
+                continue
             if ans in (":quit", ":q"):
                 return "quit"
             if ans in (":menu", ":m"):
                 return "menu"
             if ans in (":skip", ":n"):
                 break
-            if check_answer(ans, {"accept": [cmdtext], "mode": "smart"}):
+            if check_answer(ans, {"accept": [cmd], "mode": "smart"}):
                 tm["learn"] += 1
-                print(f"  {ok('Good copy.')}")
+                print(f"  {ok('Got it.')}")
                 break
-            diff = flag_diff(ans, [cmdtext], fam)
-            print(f"  {bad('Almost - check it against the line above.')}")
+            diff = flag_diff(ans, [cmd], fam)
+            print(f"  {bad('Almost - the command is right above.')}")
             if diff:
                 render_diff(ans, diff)
-    print(f"\n  {b('Now without the answer in front of you:')}")
+    print(f"\n  {b('Now from memory - same tool, no answer shown:')}")
     return study_loop(pool, "tutorial", prog, session_len=5,
                       label=f"learning {fam}")
 

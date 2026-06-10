@@ -1695,4 +1695,1793 @@ DRILLS = {
          "e": "remount changes options without unmounting."},
         {"q": "Unmount the filesystem at /mnt/usb.",
          "a": ["umount /mnt/usb"], "h": "Note: umount, not unmount.",
-         "e": "umount detaches; fails
+         "e": "umount detaches; fails if files are in use (check with lsof)."},
+        {"q": "Mount the NFS export server:/share at /mnt/nfs.",
+         "a": ["mount -t nfs server:/share /mnt/nfs"],
+         "h": "-t names the filesystem type.",
+         "e": "-t nfs + host:/path mounts a network share."},
+    ],
+    "firewall-cmd": [
+        {"q": "Show the full configuration of the current firewalld zone.",
+         "a": ["firewall-cmd --list-all"], "h": "--list-all.",
+         "e": "Shows services, ports, and rich rules in the active zone."},
+        {"q": "Permanently allow the https SERVICE (not the raw port).",
+         "a": ["firewall-cmd --permanent --add-service=https",
+               "firewall-cmd --add-service=https --permanent"],
+         "h": "--add-service instead of --add-port.",
+         "e": "Services are named bundles of ports; then --reload."},
+        {"q": "Permanently REMOVE the opening for port 8080/tcp.",
+         "a": ["firewall-cmd --permanent --remove-port=8080/tcp",
+               "firewall-cmd --remove-port=8080/tcp --permanent"],
+         "h": "remove instead of add.", "e": "Follow with --reload to apply."},
+        {"q": "Show which zones are active and on which interfaces.",
+         "a": ["firewall-cmd --get-active-zones"], "h": "get-active-zones.",
+         "e": "Maps interfaces to zones - key when traffic isn't matching rules."},
+    ],
+    "ufw": [
+        {"q": "Turn the ufw firewall ON.",
+         "a": ["ufw enable"], "h": "One word.", "e": "enable activates and persists."},
+        {"q": "Block inbound telnet (port 23).",
+         "a": ["ufw deny 23", "ufw deny 23/tcp", "ufw deny telnet"],
+         "h": "The opposite of allow.", "e": "deny drops matching traffic."},
+        {"q": "Show the rules WITH index numbers (for deleting by number).",
+         "a": ["ufw status numbered"], "h": "status, plus a word.",
+         "e": "Numbered output enables `ufw delete <n>`."},
+        {"q": "Allow ALL traffic from the single host 10.0.0.5.",
+         "a": ["ufw allow from 10.0.0.5"], "h": "allow from <ip>.",
+         "e": "Source-based rule - no port means all ports."},
+    ],
+    "useradd": [
+        {"q": "Change bob's login shell to /usr/sbin/nologin (block shell access).",
+         "a": ["usermod -s /usr/sbin/nologin bob"],
+         "h": "usermod with the shell flag.",
+         "e": "nologin politely refuses interactive logins."},
+        {"q": "Create a SYSTEM account 'svc' without a home directory.",
+         "a": ["useradd -r -M svc", "useradd -M -r svc"],
+         "h": "-r for system account, -M for no home.",
+         "e": "-r uses the system UID range; -M skips home creation."},
+        {"q": "Delete the user carol AND remove her home directory.",
+         "a": ["userdel -r carol"], "h": "userdel plus one flag.",
+         "e": "-r also removes the home dir and mail spool."},
+        {"q": "Unlock bob's previously locked account.",
+         "a": ["usermod -U bob", "passwd -u bob"],
+         "h": "The capital/lowercase opposites of -L/-l.",
+         "e": "usermod -U / passwd -u remove the lock."},
+        {"q": "Make the account 'temp' expire on 2026-12-31.",
+         "a": ["usermod -e 2026-12-31 temp", "chage -E 2026-12-31 temp"],
+         "h": "usermod -e or chage -E.",
+         "e": "Expiry disables the whole account on that date."},
+    ],
+    "apt": [
+        {"q": "Refresh the package index (do this before installing).",
+         "a": ["apt update", "apt-get update"], "h": "update vs upgrade.",
+         "e": "update refreshes lists; upgrade installs newer versions."},
+        {"q": "Remove the package htop.",
+         "a": ["apt remove htop", "apt-get remove htop"],
+         "h": "The opposite of install.",
+         "e": "remove keeps config files; purge deletes them too."},
+        {"q": "Upgrade all installed packages.",
+         "a": ["apt upgrade", "apt-get upgrade"], "h": "After an update.",
+         "e": "upgrade applies everything the refreshed index offers."},
+    ],
+    "dnf": [
+        {"q": "Search the repositories for packages matching 'nginx'.",
+         "a": ["dnf search nginx", "yum search nginx"], "h": "The verb is search.",
+         "e": "search matches names/summaries."},
+        {"q": "Remove the package httpd.",
+         "a": ["dnf remove httpd", "yum remove httpd"], "h": "Same verb as apt.",
+         "e": "Also removes dependent packages - read the prompt!"},
+        {"q": "List which installed packages have updates available.",
+         "a": ["dnf check-update", "yum check-update"], "h": "check-...",
+         "e": "check-update lists without installing."},
+    ],
+    "ssh-keygen": [
+        {"q": "Generate a modern ed25519 SSH key pair.",
+         "a": ["ssh-keygen -t ed25519"], "h": "-t picks the key type.",
+         "e": "ed25519 is the current recommended type."},
+        {"q": "Install your public key on web01 for the user alice.",
+         "a": ["ssh-copy-id alice@web01"], "h": "There's a dedicated copy tool.",
+         "e": "ssh-copy-id appends to ~/.ssh/authorized_keys remotely."},
+        {"q": "SSH to host 'bastion' as admin on the non-standard port 2222.",
+         "a": ["ssh -p 2222 admin@bastion", "ssh admin@bastion -p 2222"],
+         "h": "-p for port (capital -P is scp!).",
+         "e": "ssh uses -p; scp confusingly uses -P."},
+    ],
+    "setfacl": [
+        {"q": "Remove bob's ACL entry from project.txt.",
+         "a": ["setfacl -x u:bob project.txt"], "h": "-x removes an entry.",
+         "e": "-x deletes one entry; -b strips ALL ACLs."},
+        {"q": "View the ACLs currently set on project.txt.",
+         "a": ["getfacl project.txt"], "h": "The reading twin of setfacl.",
+         "e": "getfacl prints owner, group, and every ACL entry."},
+        {"q": "Strip ALL ACL entries from project.txt in one go.",
+         "a": ["setfacl -b project.txt"],
+         "h": "One flag removes everything.",
+         "e": "-b (blank) removes every ACL entry, leaving the base permissions."},
+    ],
+    "chattr": [
+        {"q": "Remove the immutable attribute from /etc/resolv.conf.",
+         "a": ["chattr -i /etc/resolv.conf"], "h": "Minus instead of plus.",
+         "e": "-i clears immutable so the file can change again."},
+        {"q": "List the attributes set on /etc/resolv.conf.",
+         "a": ["lsattr /etc/resolv.conf"], "h": "The ls of attributes.",
+         "e": "lsattr shows flags like i (immutable) and a (append-only)."},
+    ],
+    "selinux": [
+        {"q": "Check which SELinux mode the system is in right now.",
+         "a": ["getenforce", "sestatus"], "h": "get-...",
+         "e": "getenforce prints Enforcing/Permissive/Disabled."},
+        {"q": "List ALL SELinux booleans and their current values.",
+         "a": ["getsebool -a"], "h": "getsebool with one flag.",
+         "e": "-a dumps every boolean - grep it for the one you need."},
+        {"q": "List files in the current directory WITH their SELinux contexts.",
+         "a": ["ls -Z"], "h": "A special ls flag.",
+         "e": "-Z shows user:role:type:level labels."},
+        {"q": "Manually set index.html's context TYPE to httpd_sys_content_t.",
+         "a": ["chcon -t httpd_sys_content_t index.html"],
+         "h": "chcon with -t.",
+         "e": "chcon changes contexts directly (restorecon resets to policy)."},
+    ],
+    "dig": [
+        {"q": "Resolve example.com showing ONLY the bare answer (no sections).",
+         "a": ["dig +short example.com", "dig example.com +short"],
+         "h": "A +option trims output.", "e": "+short prints just the records."},
+        {"q": "Query the MX (mail) records for example.com.",
+         "a": ["dig example.com MX", "dig MX example.com", "dig example.com mx",
+               "dig mx example.com"],
+         "h": "Record type after the name.", "e": "Add a type: MX, NS, TXT, AAAA..."},
+        {"q": "Resolve example.com using Google's resolver 8.8.8.8 specifically.",
+         "a": ["dig @8.8.8.8 example.com", "dig example.com @8.8.8.8"],
+         "h": "@server picks the resolver.",
+         "e": "@8.8.8.8 bypasses /etc/resolv.conf - great for isolating DNS issues."},
+    ],
+    "tcpdump": [
+        {"q": "Capture on eth0, but only traffic on port 443.",
+         "a": ["tcpdump -i eth0 port 443", "tcpdump port 443 -i eth0"],
+         "h": "Append a capture filter.", "e": "Filters like 'port N' cut the noise."},
+        {"q": "Capture on eth0 and SAVE packets to cap.pcap for Wireshark.",
+         "a": ["tcpdump -i eth0 -w cap.pcap", "tcpdump -w cap.pcap -i eth0"],
+         "h": "-w writes a file.", "e": "-w saves raw packets; -r reads them back."},
+        {"q": "Capture on eth0, only traffic to/from host 10.0.0.5.",
+         "a": ["tcpdump -i eth0 host 10.0.0.5", "tcpdump host 10.0.0.5 -i eth0"],
+         "h": "host <ip> filter.", "e": "'host' matches either direction."},
+    ],
+    "modprobe": [
+        {"q": "List all currently loaded kernel modules.",
+         "a": ["lsmod"], "h": "The ls of modules.",
+         "e": "lsmod reads /proc/modules."},
+        {"q": "Rebuild the module dependency map after installing new modules.",
+         "a": ["depmod", "depmod -a"], "h": "dep-...",
+         "e": "depmod regenerates modules.dep, which modprobe relies on."},
+        {"q": "Show only the PARAMETERS the e1000e module accepts.",
+         "a": ["modinfo -p e1000e"], "h": "modinfo with one flag.",
+         "e": "-p limits modinfo to parameters."},
+    ],
+    "dracut": [
+        {"q": "Force-rebuild the initramfs for the SPECIFIC kernel 6.8.0.",
+         "a": ["dracut -f --kver 6.8.0", "dracut --kver 6.8.0 -f"],
+         "h": "--kver picks the kernel.",
+         "e": "Without --kver, dracut builds for the running kernel."},
+        {"q": "On Debian/Ubuntu, regenerate the initramfs for the current kernel.",
+         "a": ["update-initramfs -u"], "h": "Debian's own tool.",
+         "e": "update-initramfs -u is Debian's dracut -f equivalent."},
+    ],
+    "rsync": [
+        {"q": "DRY-RUN the sync of /home/data/ to backup01:/srv/data (show, don't copy).",
+         "a": ["rsync -avzn /home/data/ backup01:/srv/data",
+               "rsync -avz -n /home/data/ backup01:/srv/data",
+               "rsync -avz --dry-run /home/data/ backup01:/srv/data",
+               "rsync -n -avz /home/data/ backup01:/srv/data"],
+         "h": "Add the dry-run flag.", "e": "-n / --dry-run previews changes."},
+        {"q": "Mirror /home/data/ to backup01:/srv/data, DELETING remote files that no longer exist locally.",
+         "a": ["rsync -avz --delete /home/data/ backup01:/srv/data",
+               "rsync --delete -avz /home/data/ backup01:/srv/data"],
+         "h": "--delete makes it a true mirror.",
+         "e": "--delete removes extraneous files on the destination."},
+        {"q": "Locally copy /src/ into /dst preserving permissions and times.",
+         "a": ["rsync -av /src/ /dst", "rsync -av /src/ /dst/"],
+         "h": "rsync works locally too.", "e": "-a alone covers perms/times/links."},
+    ],
+    "crontab": [
+        {"q": "List your current crontab without editing it.",
+         "a": ["crontab -l"], "h": "l for list.", "e": "-l prints, -e edits."},
+        {"q": "Delete your entire crontab.",
+         "a": ["crontab -r"], "h": "r for remove (careful - no confirmation!).",
+         "e": "-r wipes the whole crontab silently."},
+        {"q": "Edit the crontab of the user 'deploy' (as root).",
+         "a": ["crontab -e -u deploy", "crontab -u deploy -e"],
+         "h": "-u targets another user.",
+         "e": "-u USER works with -l, -e, and -r."},
+    ],
+    "git": [
+        {"q": "Stage ALL changed files in the repo.",
+         "a": ["git add .", "git add -A", "git add --all"],
+         "h": "add with a catch-all.", "e": "'.' stages the tree; -A includes deletions."},
+        {"q": "Show which files are modified/staged/untracked.",
+         "a": ["git status"], "h": "One word.",
+         "e": "status is the safe first command in any repo."},
+        {"q": "Show the commit history, one line per commit.",
+         "a": ["git log --oneline"], "h": "log plus a format flag.",
+         "e": "--oneline compresses each commit to hash + subject."},
+        {"q": "Upload your local commits to the remote.",
+         "a": ["git push"], "h": "One word.",
+         "e": "push sends commits; pull fetches + merges."},
+    ],
+    "kubectl": [
+        {"q": "List the pods in the current namespace.",
+         "a": ["kubectl get pods", "kubectl get po"], "h": "get + resource.",
+         "e": "get is the universal lister: pods, svc, deploy..."},
+        {"q": "View the logs of the pod 'mypod'.",
+         "a": ["kubectl logs mypod"], "h": "Same word containers use.",
+         "e": "Add -f to follow; -c CONTAINER for multi-container pods."},
+        {"q": "Show detailed status and events for the deployment 'web'.",
+         "a": ["kubectl describe deployment web", "kubectl describe deploy web"],
+         "h": "More detail than get.",
+         "e": "describe includes the event log - first stop when pods won't start."},
+        {"q": "Delete everything defined in deploy.yaml.",
+         "a": ["kubectl delete -f deploy.yaml"], "h": "The inverse of apply -f.",
+         "e": "delete -f removes the manifest's resources."},
+    ],
+    "ansible": [
+        {"q": "DRY-RUN the playbook site.yml (report changes, don't make them).",
+         "a": ["ansible-playbook site.yml --check",
+               "ansible-playbook --check site.yml"],
+         "h": "--check.", "e": "--check is Ansible's dry-run mode."},
+        {"q": "Run the shell command 'uptime' on all hosts via the command module.",
+         "a": ["ansible all -m command -a uptime", "ansible all -m command -a 'uptime'",
+               'ansible all -m command -a "uptime"'],
+         "h": "-m command -a '<cmd>'.",
+         "e": "-a passes arguments to the module."},
+        {"q": "List which hosts an 'all' pattern would target (no execution).",
+         "a": ["ansible all --list-hosts"], "h": "--list-hosts.",
+         "e": "Quick inventory sanity check before a real run."},
+    ],
+    "systemd-analyze": [
+        {"q": "Show the TOTAL time the last boot took (kernel + userspace).",
+         "a": ["systemd-analyze", "systemd-analyze time"],
+         "h": "The bare command already answers this.",
+         "e": "Plain systemd-analyze prints the boot time summary."},
+        {"q": "Show the chain of units that actually DELAYED boot.",
+         "a": ["systemd-analyze critical-chain"], "h": "critical-...",
+         "e": "critical-chain shows the dependency path, not just slow units."},
+    ],
+    "mkfs": [
+        {"q": "Format /dev/sdd1 with XFS.",
+         "a": ["mkfs.xfs /dev/sdd1", "mkfs -t xfs /dev/sdd1"],
+         "h": "Same pattern as ext4.", "e": "mkfs.xfs or mkfs -t xfs."},
+        {"q": "Format /dev/sdc1 as ext4 WITH the label 'data'.",
+         "a": ["mkfs.ext4 -L data /dev/sdc1", "mkfs.ext4 /dev/sdc1 -L data"],
+         "h": "-L sets a label.", "e": "Labels let fstab mount by LABEL=data."},
+    ],
+    "fsresize": [
+        {"q": "Grow the XFS filesystem mounted at /srv.",
+         "a": ["xfs_growfs /srv"], "h": "Mount point, not device.",
+         "e": "xfs_growfs always takes the mount point."},
+        {"q": "Shrink the ext4 on /dev/datavg/web down to exactly 10G (it's unmounted).",
+         "a": ["resize2fs /dev/datavg/web 10G"],
+         "h": "resize2fs takes an optional target size.",
+         "e": "With a size argument resize2fs shrinks; only ext supports shrinking."},
+    ],
+    "virsh": [
+        {"q": "Power on the VM named 'webvm'.",
+         "a": ["virsh start webvm"], "h": "The verb is start.",
+         "e": "start boots a defined domain."},
+        {"q": "Gracefully shut down the VM 'webvm'.",
+         "a": ["virsh shutdown webvm"], "h": "Graceful, not destroy.",
+         "e": "shutdown asks the guest OS; destroy pulls the plug."},
+    ],
+    "dmesg": [
+        {"q": "Show kernel messages with human-readable timestamps.",
+         "a": ["dmesg -T", "dmesg --ctime"], "h": "Capital T.",
+         "e": "-T converts seconds-since-boot to wall-clock time."},
+        {"q": "FOLLOW the kernel ring buffer live as new messages arrive.",
+         "a": ["dmesg -w", "dmesg --follow"], "h": "w for wait/watch.",
+         "e": "-w streams new kernel messages like tail -f."},
+        {"q": "Show only error-level kernel messages and worse.",
+         "a": ["dmesg -l err", "dmesg --level=err", "dmesg -l err,crit"],
+         "h": "-l takes a level name.", "e": "-l filters by log level."},
+    ],
+    "lsblk": [
+        {"q": "Show block devices WITH their filesystems, labels, and UUIDs.",
+         "a": ["lsblk -f", "lsblk --fs"], "h": "f for filesystem info.",
+         "e": "-f adds FSTYPE, LABEL, and UUID columns - handy for fstab."},
+        {"q": "Show block devices with FULL device paths (/dev/...).",
+         "a": ["lsblk -p", "lsblk --paths"], "h": "p for paths.",
+         "e": "-p prints /dev/sda1 instead of just sda1."},
+    ],
+    "df": [
+        {"q": "Show disk usage including each filesystem's TYPE.",
+         "a": ["df -hT", "df -Th", "df -T"], "h": "Capital T adds a column.",
+         "e": "-T shows ext4/xfs/tmpfs per mount."},
+        {"q": "Show INODE usage instead of block usage.",
+         "a": ["df -i", "df -hi", "df -ih"], "h": "i for inodes.",
+         "e": "A full inode table blocks new files even with free space."},
+        {"q": "Show usage for ONLY the filesystem containing /var.",
+         "a": ["df -h /var", "df /var"], "h": "Just pass the path.",
+         "e": "df with a path reports only that path's filesystem."},
+    ],
+    "du": [
+        {"q": "Show the size of each immediate subdirectory of /var (one level deep), human-readable.",
+         "a": ["du -h --max-depth=1 /var", "du --max-depth=1 -h /var",
+               "du -h -d 1 /var", "du -d 1 -h /var"],
+         "h": "There's a depth limiter.",
+         "e": "--max-depth=1 (or -d 1) stops the recursion one level down."},
+        {"q": "Show sizes of EVERY file and directory under /opt, human-readable.",
+         "a": ["du -ah /opt", "du -ha /opt", "du -a -h /opt"],
+         "h": "a for all (files too).",
+         "e": "-a includes individual files, not just directory totals."},
+    ],
+    "free": [
+        {"q": "Show memory in whole MEBIBYTES.",
+         "a": ["free -m"], "h": "One letter.", "e": "-m for MiB, -g for GiB."},
+        {"q": "Show memory refreshing every 5 seconds continuously.",
+         "a": ["free -s 5", "free -h -s 5", "free -s 5 -h"],
+         "h": "s for seconds.", "e": "-s N repeats the report every N seconds."},
+        {"q": "Show memory with a TOTAL line summing RAM + swap.",
+         "a": ["free -t", "free -ht", "free -th"], "h": "t for total.",
+         "e": "-t appends a combined total row."},
+    ],
+    "ps": [
+        {"q": "Show only the processes belonging to the user alice.",
+         "a": ["ps -u alice", "ps -fu alice", "ps -u alice -f"],
+         "h": "-u takes a username.", "e": "-u filters the table by user."},
+        {"q": "Show all processes as a TREE of parents and children.",
+         "a": ["pstree", "ps -ef --forest", "ps aux --forest", "ps --forest"],
+         "h": "pstree, or a ps --long-flag.",
+         "e": "--forest draws ASCII parent/child lines; pstree is dedicated."},
+        {"q": "Show every process in System V style (full format).",
+         "a": ["ps -ef"], "h": "The dash style this time.",
+         "e": "-e every process, -f full format - the SysV twin of aux."},
+    ],
+    "fsck": [
+        {"q": "Check /dev/sdc1 WITHOUT making any changes (report only).",
+         "a": ["fsck -n /dev/sdc1", "fsck -N /dev/sdc1"],
+         "h": "Answer 'no' to everything.",
+         "e": "-n answers no to all repair prompts - a safe dry inspection."},
+        {"q": "Force a check of /dev/sdc1 even though it's marked clean.",
+         "a": ["fsck -f /dev/sdc1", "fsck -fy /dev/sdc1"],
+         "h": "f for force.", "e": "-f checks even when the FS claims it's clean."},
+    ],
+    "mtr": [
+        {"q": "Run mtr to 8.8.8.8 in one-shot REPORT mode (no live screen).",
+         "a": ["mtr -r 8.8.8.8", "mtr --report 8.8.8.8", "mtr -rw 8.8.8.8"],
+         "h": "r for report.", "e": "-r runs a batch and prints a summary - script-friendly."},
+        {"q": "Run mtr to 8.8.8.8 with exactly 20 probe cycles.",
+         "a": ["mtr -c 20 8.8.8.8", "mtr -r -c 20 8.8.8.8", "mtr -c 20 -r 8.8.8.8"],
+         "h": "c for count.", "e": "-c N sends N pings per hop then stops."},
+        {"q": "Run mtr to 8.8.8.8 using numeric IPs only (skip DNS lookups).",
+         "a": ["mtr -n 8.8.8.8", "mtr -rn 8.8.8.8", "mtr -nr 8.8.8.8"],
+         "h": "Same letter ss uses for numeric.",
+         "e": "-n avoids slow reverse-DNS on every hop."},
+    ],
+    "lsof": [
+        {"q": "List all files opened by PID 1234.",
+         "a": ["lsof -p 1234"], "h": "p for PID.",
+         "e": "-p shows everything one process has open."},
+        {"q": "List all files opened by the user bob.",
+         "a": ["lsof -u bob"], "h": "u for user.",
+         "e": "-u filters by owner - useful before unmounting their disk."},
+        {"q": "List ALL network connections (any port).",
+         "a": ["lsof -i"], "h": "Same flag as the port version, no port.",
+         "e": "-i alone lists every internet socket."},
+    ],
+    "renice": [
+        {"q": "As root, RAISE the priority of PID 2000 by setting nice to -5.",
+         "a": ["renice -5 2000", "renice -n -5 2000", "renice -n -5 -p 2000",
+               "renice -5 -p 2000"],
+         "h": "Negative nice = higher priority (root only).",
+         "e": "Nice runs -20 (highest priority) to 19 (lowest)."},
+        {"q": "LAUNCH ./batch.sh at low priority (nice value 10).",
+         "a": ["nice -n 10 ./batch.sh", "nice -10 ./batch.sh"],
+         "h": "nice at launch, renice afterwards.",
+         "e": "nice -n 10 starts the process already niced."},
+    ],
+    "nohup": [
+        {"q": "List the background jobs of your current shell.",
+         "a": ["jobs"], "h": "One word.",
+         "e": "jobs shows your shell's job table with %numbers."},
+        {"q": "Resume the stopped job number 2 in the BACKGROUND.",
+         "a": ["bg %2", "bg 2"], "h": "bg + job number.",
+         "e": "Ctrl+Z stops a job; bg resumes it in the background."},
+        {"q": "Bring job number 1 to the FOREGROUND.",
+         "a": ["fg %1", "fg 1"], "h": "The opposite of bg.",
+         "e": "fg reattaches a job to your terminal."},
+    ],
+    "vmstat": [
+        {"q": "Print a one-shot summary of memory statistics (no interval).",
+         "a": ["vmstat -s"], "h": "s for summary.",
+         "e": "-s prints totals once instead of sampling."},
+        {"q": "Sample stats every 2 seconds, but only 5 times, then stop.",
+         "a": ["vmstat 2 5"], "h": "Interval then count.",
+         "e": "vmstat INTERVAL COUNT bounds the run - good for scripts."},
+    ],
+    "iostat": [
+        {"q": "Show ONLY device I/O (skip the CPU section), refreshing every 5s.",
+         "a": ["iostat -d 5"], "h": "d for devices.",
+         "e": "-d limits output to the device report."},
+        {"q": "Show extended device stats but HIDE idle devices.",
+         "a": ["iostat -xz", "iostat -zx", "iostat -x -z"],
+         "h": "Add z to your usual -x.", "e": "-z suppresses all-zero devices."},
+    ],
+    "uptime": [
+        {"q": "Show the uptime in friendly words ('up 2 weeks, 3 days...').",
+         "a": ["uptime -p", "uptime --pretty"], "h": "p for pretty.",
+         "e": "-p prints just a human-friendly duration."},
+        {"q": "Show the exact date and time the system BOOTED.",
+         "a": ["uptime -s", "uptime --since"], "h": "s for since.",
+         "e": "-s prints the boot timestamp."},
+    ],
+    "sort": [
+        {"q": "Sort numbers.txt NUMERICALLY (so 9 comes before 10).",
+         "a": ["sort -n numbers.txt"], "h": "n for numeric.",
+         "e": "Without -n, sort is alphabetical: 10 < 9."},
+        {"q": "Sort names.txt in REVERSE order.",
+         "a": ["sort -r names.txt"], "h": "r for reverse.",
+         "e": "-r flips the order; combine as -rn for numeric descending."},
+        {"q": "Sort list.txt and drop duplicate lines in one step.",
+         "a": ["sort -u list.txt"], "h": "One flag replaces piping to uniq.",
+         "e": "-u outputs each unique line once (sort + uniq combined)."},
+    ],
+    "visudo": [
+        {"q": "Syntax-CHECK the sudoers file without opening an editor.",
+         "a": ["visudo -c"], "h": "c for check.",
+         "e": "-c validates /etc/sudoers and everything in sudoers.d."},
+        {"q": "Safely edit the drop-in file /etc/sudoers.d/devs.",
+         "a": ["visudo -f /etc/sudoers.d/devs"], "h": "-f picks the file.",
+         "e": "-f applies visudo's locking and checking to any sudoers file."},
+    ],
+    "lastb": [
+        {"q": "Show the last 10 SUCCESSFUL logins.",
+         "a": ["last -n 10", "last -10"], "h": "last (no b) + a count.",
+         "e": "last reads /var/log/wtmp; -n limits the rows."},
+        {"q": "Show the system's REBOOT history.",
+         "a": ["last reboot"], "h": "last with a pseudo-user.",
+         "e": "'reboot' is logged as a pseudo-user in wtmp."},
+    ],
+}
+
+
+# --------------------------------------------------------------------------- #
+#  Official XK0-006 V8 objective mapping (verified against the CompTIA PDF)
+# --------------------------------------------------------------------------- #
+
+OBJ_BY_TOPIC = {
+    "Processes": "2.3", "Jobs": "2.3", "Scheduling": "2.3",
+    "Kernel modules": "1.2", "Devices": "1.2", "initrd": "1.2",
+    "LVM": "1.3", "Filesystems": "1.3", "Mounting": "1.3",
+    "Text tools": "1.5", "Redirection": "1.5",
+    "Backup": "1.6", "Compression": "1.6", "Virtualization": "1.7",
+    "systemd": "2.5", "Boot": "2.5", "Software": "2.4", "Users": "2.2",
+    "Containers": "2.6", "Logging": "3.3", "Logs": "3.3",
+    "Permissions": "3.1", "ACLs": "3.1", "Attributes": "3.1",
+    "SELinux": "3.1", "SSH": "3.1", "Hardening": "3.1",
+    "Privilege escalation": "3.1", "firewalld": "3.2", "ufw": "3.2",
+    "Scripting": "4.2", "Ansible": "4.1", "Kubernetes": "4.1",
+    "Compose": "4.1", "Version control": "4.4",
+    "Memory": "5.5", "Performance": "5.5", "Disk I/O": "5.5",
+    "Network": "1.4", "DNS": "1.4", "Security": "5.4",
+}
+OBJ_OVERRIDES = {"shell-find-size": "2.1"}   # find lives under files/dirs
+
+for _s in SCENARIOS:
+    _s["obj"] = OBJ_OVERRIDES.get(_s["id"], OBJ_BY_TOPIC.get(_s["topic"], "?"))
+
+
+# --------------------------------------------------------------------------- #
+#  Parameterized scenarios: names/ports/users/sizes randomize on every ask,
+#  so you learn the COMMAND SHAPE, not a memorized string.
+# --------------------------------------------------------------------------- #
+
+PARAM_POOLS = {
+    "user": ["alice", "bob", "carol", "marco", "dana", "priya"],
+    "group": ["docker", "wheel", "devs", "staff", "dba"],
+    "file": ["report.txt", "notes.log", "data.csv", "huge.log"],
+    "pid": ["4821", "2317", "1054", "3982", "6650"],
+    "hport": ["8080", "8081", "8088", "9090"],
+    "cname": ["web", "api", "db", "cache"],
+    "size": ["10G", "20G", "40G"],
+    "lv": ["web", "data", "apps"],
+    "port": ["443", "8443", "3306", "9000"],
+    "mod": ["vfio", "btrfs", "dummy", "nbd"],
+}
+
+PARAM_TEMPLATES = {
+    "user-useradd": {
+        "prompt": "Create the user '{user}' with a home directory and bash as "
+                  "the login shell.",
+        "accept": ["useradd -m -s /bin/bash {user}",
+                   "useradd -s /bin/bash -m {user}"],
+        "hints": ["-m creates the home directory; -s sets the login shell.",
+                  "useradd -m -s /bin/bash <name>",
+                  "useradd -m -s /bin/bash {user}"],
+        "explain": "`useradd -m -s /bin/bash {user}` makes the account, its "
+                   "home dir (-m), and sets the shell (-s). Then set a "
+                   "password with `passwd`."},
+    "user-usermod-group": {
+        "prompt": "Add the existing user '{user}' to the '{group}' group "
+                  "WITHOUT removing them from any of their current groups.",
+        "accept": ["usermod -aG {group} {user}", "usermod -a -G {group} {user}",
+                   "usermod -G {group} -a {user}"],
+        "hints": ["Just -G would REPLACE the group list - dangerous.",
+                  "The -a (append) flag is the key, alongside -G.",
+                  "usermod -aG {group} {user}"]},
+    "user-lock": {
+        "prompt": "Lock the account '{user}' so they can no longer log in "
+                  "with their password.",
+        "accept": ["usermod -L {user}", "passwd -l {user}",
+                   "usermod --lock {user}"],
+        "hints": ["Two tools can lock a password.",
+                  "usermod -L <user>  or  passwd -l <user>",
+                  "usermod -L {user}"]},
+    "sec-chown": {
+        "prompt": "Change the owner of {file} to '{user}' and the group to "
+                  "'{group}' in one command.",
+        "accept": ["chown {user}:{group} {file}", "chown {user}.{group} {file}"],
+        "hints": ["chown can set user and group together with a colon.",
+                  "chown user:group <file>",
+                  "chown {user}:{group} {file}"],
+        "explain": "`chown {user}:{group} {file}` sets both owner and group. "
+                   "Use -R to recurse through a directory tree."},
+    "proc-kill9": {
+        "prompt": "A hung process with PID {pid} won't respond to a normal "
+                  "stop. Forcibly terminate it with the KILL signal.",
+        "accept": ["kill -9 {pid}", "kill -KILL {pid}", "kill -s 9 {pid}",
+                   "kill -s KILL {pid}"]},
+    "proc-renice": {
+        "prompt": "Lower the scheduling priority of the already-running PID "
+                  "{pid} by setting its nice value to 10.",
+        "accept": ["renice 10 {pid}", "renice -n 10 {pid}",
+                   "renice 10 -p {pid}", "renice -n 10 -p {pid}"],
+        "hints": ["`nice` sets priority at launch; this process is already running.",
+                  "The tool for a running process is `renice`.",
+                  "renice 10 {pid}"]},
+    "ctr-run": {
+        "prompt": "Run an nginx container in the background, mapping host "
+                  "port {hport} to container port 80.",
+        "accept": ["podman run -d -p {hport}:80 nginx",
+                   "docker run -d -p {hport}:80 nginx",
+                   "podman run -p {hport}:80 -d nginx",
+                   "docker run -p {hport}:80 -d nginx"],
+        "hints": ["-d detaches (background); -p maps ports host:container.",
+                  "<runtime> run -d -p {hport}:80 <image>",
+                  "podman run -d -p {hport}:80 nginx"]},
+    "ctr-exec": {
+        "prompt": "Open an interactive bash shell inside the running "
+                  "container named '{cname}'.",
+        "accept": ["podman exec -it {cname} bash", "docker exec -it {cname} bash",
+                   "podman exec -i -t {cname} bash",
+                   "docker exec -i -t {cname} bash"],
+        "hints": ["`exec` runs a command in an existing container.",
+                  "-i keeps stdin open, -t allocates a TTY: -it.",
+                  "podman exec -it {cname} bash"]},
+    "lvm-lvcreate": {
+        "prompt": "Carve a {size} logical volume named '{lv}' out of the "
+                  "volume group 'datavg'.",
+        "accept": ["lvcreate -L {size} -n {lv} datavg",
+                   "lvcreate -n {lv} -L {size} datavg"],
+        "hints": ["Use -L for a fixed size and -n for the name.",
+                  "Order: lvcreate -L <size> -n <name> <vg>",
+                  "lvcreate -L {size} -n {lv} datavg"]},
+    "sec-firewalld-port": {
+        "prompt": "Permanently open TCP port {port} in firewalld (the change "
+                  "should persist across reloads).",
+        "accept": ["firewall-cmd --permanent --add-port={port}/tcp",
+                   "firewall-cmd --add-port={port}/tcp --permanent"],
+        "hints": ["firewalld's CLI is firewall-cmd.",
+                  "--permanent persists; --add-port=PORT/PROTO opens it.",
+                  "firewall-cmd --permanent --add-port={port}/tcp"]},
+    "dev-modprobe": {
+        "prompt": "Load the kernel module named '{mod}' into the running "
+                  "kernel (resolving its dependencies automatically).",
+        "accept": ["modprobe {mod}"],
+        "hints": ["`insmod` loads a single .ko but ignores dependencies.",
+                  "The dependency-aware loader is `modprobe`.",
+                  "modprobe {mod}"]},
+    "backup-gzip": {
+        "prompt": "Compress the file {file} in place using gzip.",
+        "accept": ["gzip {file}"],
+        "hints": ["The classic single-file compressor.",
+                  "gzip <file>  (replaces it with file.gz).",
+                  "gzip {file}"]},
+}
+
+
+# --------------------------------------------------------------------------- #
+#  TRAPS: deliberate near-miss answers with diagnostic feedback.
+#  When a wrong answer matches one, the learner is told WHY it's wrong.
+# --------------------------------------------------------------------------- #
+
+TRAPS = {
+    "user-usermod-group": [
+        {"a": ["usermod -G {group} {user}"],
+         "msg": "Careful: -G alone REPLACES the supplementary group list - "
+                "{user} would be dropped from every other group. -aG appends."}],
+    "lvm-lvextend": [
+        {"a": ["lvextend -L 5G -r /dev/datavg/web",
+               "lvextend -r -L 5G /dev/datavg/web",
+               "lvextend --resizefs -L 5G /dev/datavg/web",
+               "lvextend -L 5G /dev/datavg/web"],
+         "msg": "-L 5G sets the LV size TO 5 GB (it could even shrink it). "
+                "+5G ADDS 5 GB to the current size."},
+        {"a": ["lvextend -L +5G /dev/datavg/web"],
+         "msg": "That grows the LV but NOT the filesystem on it - add "
+                "-r/--resizefs, or follow up with resize2fs."}],
+    "proc-kill9": [
+        {"a": ["kill {pid}", "kill -15 {pid}", "kill -TERM {pid}"],
+         "msg": "That sends SIGTERM (15) - exactly the signal this hung "
+                "process is ignoring. Signal 9 (KILL) can't be ignored."}],
+    "sd-enable-now": [
+        {"a": ["systemctl start sshd", "systemctl start sshd.service"],
+         "msg": "start only affects the running system - after a reboot sshd "
+                "stays off. The prompt wants boot persistence too."},
+        {"a": ["systemctl enable sshd", "systemctl enable sshd.service"],
+         "msg": "enable only takes effect at the NEXT boot - it doesn't start "
+                "the service now. Add --now."}],
+    "sec-firewalld-port": [
+        {"a": ["firewall-cmd --add-port={port}/tcp"],
+         "msg": "Runtime-only: without --permanent this rule vanishes at the "
+                "next reload or reboot."}],
+    "sec-setsebool": [
+        {"a": ["setsebool httpd_can_network_connect on",
+               "setsebool httpd_can_network_connect 1"],
+         "msg": "Without -P the boolean reverts at reboot - the prompt asked "
+                "for persistent."}],
+    "shell-grep": [
+        {"a": ["grep -r error /var/log"],
+         "msg": "Recursive, yes - but case-SENSITIVE: 'Error' and 'ERROR' "
+                "slip through. Add -i."},
+        {"a": ["grep -i error /var/log"],
+         "msg": "Case handled, but without -r grep won't descend into "
+                "/var/log's subdirectories."}],
+    "dev-dracut": [
+        {"a": ["dracut"],
+         "msg": "Without -f dracut refuses to overwrite the existing "
+                "initramfs image."}],
+    "fs-xfsgrow": [
+        {"a": ["xfs_growfs /dev/sdc1", "xfs_growfs /dev/datavg/data"],
+         "msg": "xfs_growfs takes the MOUNT POINT (/data), not the device "
+                "node."}],
+    "ctr-exec": [
+        {"a": ["podman run -it {cname} bash", "docker run -it {cname} bash"],
+         "msg": "run creates a brand-NEW container from an image - exec is "
+                "what enters the RUNNING one."}],
+    "log-journalctl-unit": [
+        {"a": ["journalctl -u sshd", "journalctl -u sshd.service"],
+         "msg": "That's the unit across ALL boots - add -b to limit it to the "
+                "current boot."}],
+    "ts-ss-listen": [
+        {"a": ["ss -tuln", "ss -tul", "ss -lntu"],
+         "msg": "Close - but without -p you can't see WHICH process owns each "
+                "socket, and the prompt asks for it."}],
+    "fs-mount-opts": [
+        {"a": ["mount /dev/sdc1 /mnt/data"],
+         "msg": "That mounts read-WRITE (the default). Add -o ro for "
+                "read-only."}],
+    "user-useradd": [
+        {"a": ["useradd {user}"],
+         "msg": "Bare useradd may skip the home directory and default to a "
+                "different shell - the prompt wants -m and -s /bin/bash."}],
+    "backup-tar-create": [
+        {"a": ["tar -czvf /etc backup.tar.gz", "tar -czf /etc backup.tar.gz",
+               "tar czf /etc backup.tar.gz", "tar czvf /etc backup.tar.gz"],
+         "msg": "Argument-order trap: the archive NAME must come right after "
+                "-f; sources follow. As typed, tar would try to create an "
+                "archive called /etc."}],
+    "sec-chmod-octal": [
+        {"a": ["chmod 777 script.sh"],
+         "msg": "777 'works' but hands write+execute to EVERYONE - the prompt "
+                "asked for 755 (rwx r-x r-x)."}],
+    "ts-iostat": [
+        {"a": ["iostat"],
+         "msg": "Plain iostat lacks the extended columns (%util, await) the "
+                "prompt asks for - add -x."}],
+    "dev-dmesg": [
+        {"a": ["dmesg"],
+         "msg": "Works, but timestamps stay raw seconds-since-boot - add -T "
+                "for human-readable times."}],
+}
+
+# Soft-accepts: valid answers that earn a precision note instead of a fail.
+SOFT = {
+    "sec-ufw-allow": [
+        {"a": ["ufw allow 22"],
+         "msg": "Accepted - but 22/tcp is more precise; SSH doesn't need UDP "
+                "22 open."}],
+    "ts-free": [
+        {"a": ["free -m", "free -g"],
+         "msg": "Accepted - though -m/-g lock the units; -h auto-scales, "
+                "which is the canonical 'human-readable' flag."}],
+}
+
+
+def _subst(text, vals):
+    for k, v in vals.items():
+        text = text.replace("{" + k + "}", v)
+    return text
+
+
+def instantiate(sc):
+    """Return (scenario, traps, soft) with any {placeholders} randomized."""
+    sid = sc["id"]
+    tpl = PARAM_TEMPLATES.get(sid)
+    traps = TRAPS.get(sid, [])
+    soft = SOFT.get(sid, [])
+    if not tpl:
+        return sc, traps, soft
+    blob = " ".join([tpl.get("prompt", "")] + tpl.get("accept", [])
+                    + tpl.get("hints", []) + [tpl.get("explain", "")]
+                    + [x for tr in traps for x in tr["a"] + [tr["msg"]]]
+                    + [x for sf in soft for x in sf["a"] + [sf["msg"]]])
+    keys = set(re.findall(r"\{([a-z]+)\}", blob))
+    vals = {k: random.choice(PARAM_POOLS[k]) for k in keys if k in PARAM_POOLS}
+    inst = dict(sc)
+    for f in ("prompt", "explain"):
+        if f in tpl:
+            inst[f] = _subst(tpl[f], vals)
+    if "accept" in tpl:
+        inst["accept"] = [_subst(a, vals) for a in tpl["accept"]]
+    if "hints" in tpl:
+        inst["hints"] = [_subst(h, vals) for h in tpl["hints"]]
+    traps = [{"a": [_subst(a, vals) for a in tr["a"]],
+              "msg": _subst(tr["msg"], vals)} for tr in traps]
+    soft = [{"a": [_subst(a, vals) for a in sf["a"]],
+             "msg": _subst(sf["msg"], vals)} for sf in soft]
+    return inst, traps, soft
+
+
+def _fam_record(prog, fam, ok):
+    rec = prog.setdefault("fam", {}).setdefault(fam, [0, 0])
+    rec[1] += 1
+    if ok:
+        rec[0] += 1
+
+
+# --------------------------------------------------------------------------- #
+#  Flag meanings per tool family - powers the coach-style diff feedback
+#  ("Good: -t -u -l -n | Missing: -p (show owning process)") and the
+#  weak-flag drills.
+# --------------------------------------------------------------------------- #
+
+FLAG_INFO = {
+    "ss": {"-t": "TCP sockets", "-u": "UDP sockets", "-l": "listening only",
+           "-p": "show owning process", "-n": "numeric ports",
+           "-s": "summary", "-a": "all states"},
+    "grep": {"-r": "recurse into dirs", "-i": "ignore case",
+             "-n": "line numbers", "-l": "filenames only",
+             "-v": "invert match", "-c": "count matches",
+             "-E": "extended regex", "-C": "context lines"},
+    "tar": {"-c": "create", "-x": "extract", "-t": "list contents",
+            "-z": "gzip", "-j": "bzip2", "-J": "xz",
+            "-f": "archive file", "-v": "verbose", "-C": "target dir"},
+    "journalctl": {"-u": "filter by unit", "-b": "this boot", "-f": "follow",
+                   "-k": "kernel only", "-p": "priority filter",
+                   "-n": "last N lines", "-r": "reverse order"},
+    "free": {"-h": "human-readable", "-m": "MiB", "-g": "GiB",
+             "-s": "refresh interval", "-t": "total line"},
+    "df": {"-h": "human-readable", "-T": "show fs type", "-i": "inodes",
+           "-H": "SI units"},
+    "du": {"-s": "summarize", "-h": "human-readable", "-a": "include files",
+           "-d": "max depth", "--max-depth": "max depth"},
+    "find": {"-name": "match filename", "-type": "entry type",
+             "-size": "by size", "-mtime": "by modify age",
+             "-user": "by owner", "-perm": "by permissions",
+             "-empty": "empty entries", "-delete": "delete matches"},
+    "kill": {"-9": "SIGKILL (force)", "-15": "SIGTERM (polite)",
+             "-1": "SIGHUP (reload)", "-KILL": "SIGKILL (force)",
+             "-TERM": "SIGTERM (polite)", "-HUP": "SIGHUP (reload)",
+             "-s": "signal by name", "-u": "by user (pkill)"},
+    "useradd": {"-m": "create home dir", "-M": "no home dir",
+                "-s": "login shell", "-r": "system account",
+                "-G": "supplementary groups", "-a": "append (with -G)",
+                "-L": "lock password", "-U": "unlock password",
+                "-l": "lock (passwd)", "-u": "unlock (passwd)",
+                "-e": "expiry date", "-E": "expiry date (chage)"},
+    "chmod": {"-R": "recursive"},
+    "chown": {"-R": "recursive"},
+    "rsync": {"-a": "archive (perms/times)", "-v": "verbose",
+              "-z": "compress", "-n": "dry run", "--dry-run": "dry run",
+              "--delete": "mirror deletions"},
+    "mount": {"-o": "options", "-t": "fs type", "-r": "read-only"},
+    "podman": {"-d": "detached", "-p": "publish host:container port",
+               "-i": "interactive", "-t": "allocate TTY",
+               "-e": "env variable", "-v": "volume mount",
+               "-a": "include stopped", "-f": "follow"},
+    "firewall-cmd": {"--permanent": "persist across reloads",
+                     "--reload": "apply permanent rules",
+                     "--add-port": "open a port",
+                     "--add-service": "open a service",
+                     "--remove-port": "close a port",
+                     "--list-all": "show zone config",
+                     "--get-active-zones": "zones per interface"},
+    "lvm": {"-L": "fixed size", "-l": "extents/percent", "-n": "LV name",
+            "-r": "resize filesystem too", "--resizefs": "resize fs too"},
+    "dmesg": {"-T": "human timestamps", "-w": "follow live",
+              "-l": "level filter"},
+    "iostat": {"-x": "extended stats", "-z": "hide idle devices",
+               "-d": "devices only"},
+    "vmstat": {"-s": "one-shot summary", "-w": "wide output"},
+    "tcpdump": {"-i": "interface", "-w": "write pcap", "-n": "numeric",
+                "-c": "packet count"},
+    "mtr": {"-r": "report mode", "-c": "cycle count", "-n": "numeric",
+            "-w": "wide report"},
+    "modprobe": {"-r": "remove module", "-v": "verbose", "-p": "params only",
+                 "-a": "all (depmod)"},
+    "dracut": {"-f": "force overwrite", "--force": "force overwrite",
+               "--kver": "kernel version", "-u": "update (Debian)"},
+    "ssh-keygen": {"-t": "key type", "-p": "port (ssh)", "-b": "key bits"},
+    "setfacl": {"-m": "modify entry", "-x": "remove entry",
+                "-b": "strip all ACLs", "-R": "recursive"},
+    "selinux": {"-P": "persistent", "-R": "recursive", "-v": "verbose",
+                "-t": "context type", "-Z": "show contexts",
+                "-a": "all booleans"},
+    "crontab": {"-e": "edit", "-l": "list", "-r": "remove",
+                "-u": "target user"},
+    "fsck": {"-y": "auto-yes repairs", "-n": "report only", "-f": "force check"},
+    "lsof": {"-i": "network sockets", "-p": "by PID", "-u": "by user"},
+    "uptime": {"-p": "pretty duration", "-s": "boot timestamp"},
+    "sort": {"-n": "numeric", "-r": "reverse", "-u": "unique"},
+    "gzip": {"-d": "decompress", "-k": "keep original",
+             "-9": "max compression"},
+    "ps": {"-e": "every process", "-f": "full format", "-u": "by user",
+           "--forest": "tree view"},
+    "renice": {"-n": "nice value", "-p": "target PID"},
+    "mkfs": {"-t": "fs type", "-L": "label"},
+    "ip": {"-br": "brief output", "-brief": "brief output"},
+    "ufw": {}, "systemctl": {}, "apt": {}, "dnf": {}, "git": {},
+    "kubectl": {}, "ansible": {}, "compose": {}, "dig": {},
+    "chattr": {"+i": "immutable", "-i": "clear immutable",
+               "+a": "append-only"},
+    "fsresize": {}, "virsh": {}, "visudo": {"-c": "syntax check",
+                                            "-f": "target file"},
+    "lastb": {"-n": "row limit"}, "nohup": {},
+    "systemd-analyze": {}, "lsblk": {"-f": "filesystems/UUIDs",
+                                     "-p": "full device paths"},
+}
+
+
+def _flag_meaning(fam, tok):
+    info = FLAG_INFO.get(fam, {})
+    return info.get(tok) or info.get(tok.split("=")[0])
+
+
+def flag_diff(user_cmd, accepts, fam):
+    """Compare the user's command to the closest accepted form.
+    Returns None if the tool itself (head) is wrong, else a diff dict."""
+    utoks = normalize(user_cmd).split()
+    if not utoks:
+        return None
+    uh, uf, uo = split_tokens(utoks)
+    best = None
+    bestscore = -999
+    for a in accepts:
+        ah, af, ao = split_tokens(normalize(a).split())
+        if ah != uh:
+            continue
+        score = len(set(uf) & set(af)) - abs(len(uo) - len(ao))
+        if score > bestscore:
+            best = (af, ao)
+            bestscore = score
+    if best is None:
+        return None
+    af, ao = best
+    return {
+        "good": [f for f in uf if f in af],
+        "missing": [f for f in af if f not in uf],
+        "extra": [f for f in uf if f not in af],
+        "op_missing": [o for o in ao if o not in uo],
+        "op_extra": [o for o in uo if o not in ao],
+        "fam": fam,
+    }
+
+
+def render_diff(user_cmd, diff):
+    """Coach-style breakdown of what was right and what's missing."""
+    fam = diff["fam"]
+
+    def fmt(toks):
+        parts = []
+        for tk in toks:
+            mn = _flag_meaning(fam, tk)
+            parts.append(f"{tk} ({mn})" if mn else tk)
+        return ", ".join(parts)
+
+    print(f"  {d('You typed:')} {user_cmd.strip()}")
+    if diff["good"]:
+        print(f"  {g('Good:')}    {fmt(diff['good'])}")
+    if diff["missing"]:
+        print(f"  {y('Missing:')} {fmt(diff['missing'])}")
+    if diff["extra"]:
+        print(f"  {r('Extra:')}   {fmt(diff['extra'])} {d('(not needed here)')}")
+    if diff["op_missing"]:
+        print(f"  {y('Also missing:')} {', '.join(diff['op_missing'])}")
+    if diff["op_extra"]:
+        print(f"  {r('Not needed:')}   {', '.join(diff['op_extra'])}")
+
+
+def _weak_note(prog, fam, flags):
+    wf = prog.setdefault("weakflags", {}).setdefault(fam, {})
+    for f in flags:
+        if _flag_meaning(fam, f):
+            wf[f] = wf.get(f, 0) + 1
+
+
+def _weak_clear(prog, fam, used_flags):
+    wf = prog.get("weakflags", {}).get(fam, {})
+    for f in list(wf):
+        if f in used_flags:
+            wf[f] -= 1
+            if wf[f] <= 0:
+                del wf[f]
+
+
+def micro_flag_check(fam, missing):
+    """One quick remediation question on the first missing known flag."""
+    target = None
+    for f in missing:
+        if _flag_meaning(fam, f):
+            target = f
+            break
+    if target is None:
+        return
+    meaning = _flag_meaning(fam, target)
+    print(f"  {m('Quick rep -')} which flag means "
+          f"{b(chr(39) + meaning + chr(39))}?")
+    ans = prompt_line(f"  {g('flag> ')}").strip()
+    if ans.lstrip("-+") == target.lstrip("-+") and ans:
+        print(f"  {g('● Right:')} {target}. {b('Now the full command:')}")
+    else:
+        print(f"  {r('●')} {y('It is')} {b(target)} {d('(' + meaning + ')')}. "
+              f"{b('Now the full command:')}")
+
+
+
+
+
+
+# --------------------------------------------------------------------------- #
+#  Matching engine
+# --------------------------------------------------------------------------- #
+
+def normalize(s, allow_sudo=True):
+    """Strip, collapse whitespace, and optionally drop a leading sudo."""
+    s = s.strip()
+    s = re.sub(r"\s+", " ", s)
+    if allow_sudo and s.startswith("sudo "):
+        s = s[5:].strip()
+    return s
+
+
+def split_tokens(tokens):
+    """Return (head, sorted_flag_list, ordered_operand_list).
+
+    Bundled single-letter short flags (e.g. -tulpn) are expanded so that
+    flag order and bundling don't matter, while operands keep their order.
+    """
+    if not tokens:
+        return "", [], []
+    head = tokens[0]
+    flags, operands = [], []
+    for t in tokens[1:]:
+        if len(t) > 1 and t.startswith("-"):
+            if re.fullmatch(r"-[A-Za-z]{2,}", t):           # -abc -> -a -b -c
+                flags.extend("-" + ch for ch in t[1:])
+            else:                                            # --long, -9, -s, -o=x
+                flags.append(t)
+        else:
+            operands.append(t)
+    return head, sorted(flags), operands
+
+
+def structural_match(user, accept):
+    uh, uf, uo = split_tokens(user.split())
+    ah, af, ao = split_tokens(accept.split())
+    return uh == ah and uf == af and uo == ao
+
+
+def check_answer(user_input, scenario):
+    """Return True if the typed answer satisfies the scenario."""
+    mode = scenario.get("mode", "smart")
+    un = normalize(user_input)
+    if not un:
+        return False
+    for accept in scenario["accept"]:
+        an = normalize(accept)
+        if mode == "exact":
+            if un == an:
+                return True
+        elif mode == "regex":
+            if re.fullmatch(an, un):
+                return True
+        elif mode == "contains":
+            need = an.split()
+            have = un.split()
+            if all(tok in have for tok in need):
+                return True
+        else:  # smart
+            if un == an or structural_match(un, an):
+                return True
+    return False
+
+
+# --------------------------------------------------------------------------- #
+#  Presentation helpers
+# --------------------------------------------------------------------------- #
+
+class C:
+    """ANSI colors, auto-disabled when not a TTY / NO_COLOR / --no-color."""
+    enabled = True
+    GREEN = "\033[92m"; RED = "\033[91m"; YEL = "\033[93m"; CYAN = "\033[96m"
+    DIM = "\033[2m"; BOLD = "\033[1m"; RESET = "\033[0m"; MAG = "\033[95m"
+
+    @classmethod
+    def wrap(cls, code, text):
+        return f"{code}{text}{cls.RESET}" if cls.enabled else text
+
+
+def g(t): return C.wrap(C.GREEN, t)
+def r(t): return C.wrap(C.RED, t)
+def y(t): return C.wrap(C.YEL, t)
+def c(t): return C.wrap(C.CYAN, t)
+def d(t): return C.wrap(C.DIM, t)
+def b(t): return C.wrap(C.BOLD, t)
+def m(t): return C.wrap(C.MAG, t)
+
+
+BANNER = r"""
+  ______          ___              _
+ |__  / ___  _ _ / _ \  _ _  ___  __| |
+   / / / -_)| '_|| | | || '_|/ -_)/ _` |
+  /___|\___||_|   \___/ |_|  \___|\__,_|
+
+        CompTIA Linux+  XK0-006   *  Command Gym  *  safe & offline
+"""
+
+
+# --------------------------------------------------------------------------- #
+#  Progress (Leitner-style spaced repetition)
+# --------------------------------------------------------------------------- #
+
+PROGRESS_PATH = os.path.expanduser("~/.linuxplus_cmd_trainer.json")
+
+
+def load_progress(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return {"boxes": {}, "seen": 0, "correct": 0, "first_try": 0}
+
+
+def save_progress(path, prog):
+    try:
+        with open(path, "w") as f:
+            json.dump(prog, f, indent=2)
+    except Exception:
+        pass  # never let a save failure interrupt studying
+
+
+def box_of(prog, sid):
+    return prog["boxes"].get(sid, 0)  # 0 = never answered correctly
+
+
+def weighted_pick(scenarios, prog, exclude=None):
+    """Pick a scenario, favoring ones in low Leitner boxes (less mastered)."""
+    pool = [s for s in scenarios if s["id"] != exclude] or scenarios
+    weights = [max(1, 6 - box_of(prog, s["id"])) for s in pool]
+    return random.choices(pool, weights=weights, k=1)[0]
+
+
+# --------------------------------------------------------------------------- #
+#  Session
+# --------------------------------------------------------------------------- #
+
+DOMAINS = sorted({s["domain"] for s in SCENARIOS})
+
+HELP_TEXT = f"""
+{b('Commands you can type instead of an answer:')}
+  {c(':hint')}     reveal the next hint (small first, bigger later)
+  {c(':answer')}   give up and show the correct command
+  {c(':skip')}     skip to a new scenario
+  {c(':stats')}    show your progress
+  {c(':menu')}     change which domain you're drilling
+  {c(':level')}    switch difficulty (tutorial / practice / exam)
+  {c(':help')}     show this help
+  {c(':quit')}     save and exit
+"""
+
+
+def prompt_line(text=""):
+    try:
+        return input(text)
+    except (EOFError, KeyboardInterrupt):
+        return ":quit"
+
+
+def choose_domain():
+    print(f"\n{b('What would you like to drill?')}")
+    print(f"  {c('0')}  Everything (all domains)")
+    for i, dom in enumerate(DOMAINS, 1):
+        n = sum(1 for s in SCENARIOS if s["domain"] == dom)
+        print(f"  {c(str(i))}  {dom}  {d('(' + str(n) + ' scenarios)')}")
+    print(f"  {c('w')}  Weak spots only {d('(the ones you keep missing)')}")
+    while True:
+        choice = prompt_line(f"\n{g('select> ')}").strip().lower()
+        if choice == ":quit":
+            return None, None
+        if choice == "w":
+            return "weak", None
+        if choice == "0" or choice == "":
+            return "all", None
+        if choice.isdigit() and 1 <= int(choice) <= len(DOMAINS):
+            return "domain", DOMAINS[int(choice) - 1]
+        print(r("  Please pick a number from the list (or 'w')."))
+
+
+DIFF_LABELS = {"learn": "Learn", "tutorial": "Tutorial",
+               "practice": "Practice", "exam": "Exam"}
+
+
+def choose_difficulty():
+    print(f"\n{b('Pick a difficulty:')}")
+    print(f"  {c('1')}  Learn     "
+          f"{d('- shows the answer; you copy it to build the pattern')}")
+    print(f"  {c('2')}  Tutorial  "
+          f"{d('- explains tool + flags, then rep-drills it until YOU move on')}")
+    print(f"  {c('3')}  Practice  {d('- scenario + hints on demand (default)')}")
+    print(f"  {c('4')}  Exam      {d('- scenario only, no hints, no scaffolding')}")
+    while True:
+        choice = prompt_line(f"\n{g('level> ')}").strip().lower()
+        if choice == ":quit":
+            return None
+        if choice in ("1", "learn", "copy"):
+            return "learn"
+        if choice in ("2", "tutorial", "t"):
+            return "tutorial"
+        if choice in ("", "3", "practice", "p"):
+            return "practice"
+        if choice in ("4", "exam", "e"):
+            return "exam"
+        print(r("  Pick 1-4."))
+
+
+def derive_tool(sc):
+    tt = TEACH.get(sc["id"], {})
+    return tt.get("tool_label") or sc["accept"][0].split()[0]
+
+
+def render_teach(sc):
+    """Print the Tutorial briefing for a scenario."""
+    tt = TEACH.get(sc["id"], {})
+    print(f"  {m('--- TUTORIAL ' + '-' * 50)}")
+    print(f"  {b('Tool:')}  {c(derive_tool(sc))}")
+
+    why = tt.get("why") or sc["explain"]
+    wrapped = textwrap.wrap(why, width=66)
+    print(f"  {b('Why:')}   {wrapped[0] if wrapped else why}")
+    for line in wrapped[1:]:
+        print(f"         {line}")
+
+    flags = tt.get("flags")
+    if not flags:  # fall back to flags visible in the canonical answer
+        _, found, _ = split_tokens(sc["accept"][0].split())
+        if found:
+            print(f"  {b('Flags:')} {', '.join(found)}"
+                  f"{d('   (type :hint for what each does)')}")
+    else:
+        print(f"  {b('Flags:')}")
+        for fname, fdesc in flags:
+            pad = " " * max(1, 16 - len(fname))
+            print(f"      {c(fname)}{pad}{fdesc}")
+
+    if tt.get("target"):
+        print(f"  {b('Target:')} {tt['target']}")
+    print(f"  {m('-' * 63)}")
+    print(f"  {b('Now write the command.')}")
+
+
+def run_drill(dr, prog, tool, rep):
+    """One rep exercise. Returns 'ok' (back to rep prompt) or quit/menu/level."""
+    pseudo = {"accept": dr["a"], "mode": dr.get("m", "smart")}
+    print(f"\n  {m('rep ' + str(rep))} {d('on')} {c(tool)}")
+    print(f"  {b('Task:')} {dr['q']}")
+    while True:
+        ans = prompt_line(f"  {g('$ ')}").strip()
+        if not ans:
+            continue
+        if ans in (":quit", ":q"):
+            return "quit"
+        if ans in (":menu",):
+            return "menu"
+        if ans in (":level", ":l"):
+            return "level"
+        if ans in (":stats", ":s"):
+            show_stats(prog)
+            continue
+        if ans in (":hint", ":h"):
+            hint = dr.get("h") or ("it starts with: " + dr["a"][0].split()[0])
+            print(f"  {y('hint:')} {hint}")
+            continue
+        if ans in (":skip", ":n", ":answer", ":a", ":reveal"):
+            print(f"  {y('Answer:')} {b(dr['a'][0])}")
+            if dr.get("e"):
+                print(f"  {d(dr['e'])}")
+            prog["drill_reps"] = prog.get("drill_reps", 0) + 1
+            _fam_record(prog, tool, False)
+            return "ok"
+        if check_answer(ans, pseudo):
+            prog["drill_reps"] = prog.get("drill_reps", 0) + 1
+            prog["drill_correct"] = prog.get("drill_correct", 0) + 1
+            _fam_record(prog, tool, True)
+            line = g("● Correct answer.")
+            if dr.get("e"):
+                line += "  " + d(dr["e"])
+            print(f"  {line}")
+            return "ok"
+        _fam_record(prog, tool, False)
+        diff = flag_diff(ans, dr["a"], tool)
+        print(f"  {r('● Not quite.')}")
+        if diff:
+            render_diff(ans, diff)
+            _weak_note(prog, tool, diff["missing"])
+        print(f"  {d('Try again, or :hint / :answer')}")
+
+
+def drill_loop(sc, prog):
+    """Tutorial rep mode: keep serving exercises on the same tool until the
+    learner moves on. Returns 'next', 'menu', 'level', or 'quit'."""
+    tool = drill_key(sc)
+    bank = DRILLS.get(tool, [])
+    order = list(range(len(bank)))
+    random.shuffle(order)
+    idx = 0
+    rep = 0
+    extra = "" if bank else d(" (re-typing from memory - repetition still counts!)")
+    print(f"\n  {b('Rep it in:')} keep drilling {c(tool)} until it sticks.{extra}")
+    print(d("  [Enter] another rep    [n] next scenario    "
+            "(:menu / :level / :quit also work)"))
+    while True:
+        choice = prompt_line(f"{g('rep> ')}").strip().lower()
+        if choice in ("n", "next", ":n", ":skip", ":next"):
+            return "next"
+        if choice in (":quit", ":q"):
+            return "quit"
+        if choice in (":menu", ":m"):
+            return "menu"
+        if choice in (":level", ":l"):
+            return "level"
+        if choice in (":stats", ":s"):
+            show_stats(prog)
+            continue
+        if choice not in ("", "y", "r", "rep", ":rep"):
+            print(d("  Press Enter for another rep, or n to move on."))
+            continue
+        rep += 1
+        if bank:
+            dr = bank[order[idx]]
+            idx += 1
+            if idx >= len(order):           # cycled through them all -
+                idx = 0                     # reshuffle and keep going
+                random.shuffle(order)
+        else:
+            # no authored drills for this tool: re-type the original from memory
+            dr = {"q": "From memory, write it again: " + sc["prompt"],
+                  "a": sc["accept"], "e": sc["explain"],
+                  "m": sc.get("mode", "smart"),
+                  "h": sc["hints"][-1] if sc.get("hints") else None}
+        res = run_drill(dr, prog, tool, rep)
+        if res != "ok":
+            return res
+
+
+def filter_scenarios(kind, value, prog):
+    if kind == "domain":
+        return [s for s in SCENARIOS if s["domain"] == value]
+    if kind == "weak":
+        weak = [s for s in SCENARIOS if box_of(prog, s["id"]) <= 2]
+        return weak if weak else SCENARIOS
+    return SCENARIOS
+
+
+def show_stats(prog):
+    seen, correct = prog.get("seen", 0), prog.get("correct", 0)
+    first = prog.get("first_try", 0)
+    acc = (correct / seen * 100) if seen else 0
+    mastered = sum(1 for v in prog["boxes"].values() if v >= 5)
+    touched = len(prog["boxes"])
+    print(f"\n{b('=== Your progress ===')}")
+    print(f"  Scenarios attempted : {c(str(seen))}")
+    print(f"  Correct             : {g(str(correct))}  "
+          f"({acc:.0f}% of attempts)")
+    print(f"  Solved on first try : {g(str(first))}")
+    print(f"  Mastered (box 5/5)  : {g(str(mastered))} of {len(SCENARIOS)}")
+    reps = prog.get("drill_reps", 0)
+    if reps:
+        rok = prog.get("drill_correct", 0)
+        print(f"  Tutorial reps       : {g(str(rok))}/{c(str(reps))} correct")
+    print(f"  Unique seen         : {c(str(touched))} of {len(SCENARIOS)}")
+    # per-domain mastery bar
+    print(f"\n  {b('By domain (mastered / total):')}")
+    for dom in DOMAINS:
+        ids = [s["id"] for s in SCENARIOS if s["domain"] == dom]
+        done = sum(1 for sid in ids if box_of(prog, sid) >= 5)
+        total = len(ids)
+        filled = int((done / total) * 20) if total else 0
+        bar = g("#" * filled) + d("-" * (20 - filled))
+        print(f"    {dom[:42]:42} [{bar}] {done}/{total}")
+    famrec = prog.get("fam", {})
+    rows = [(k, v[0], v[1]) for k, v in famrec.items() if v[1] >= 3]
+    if rows:
+        rows.sort(key=lambda x: x[1] / x[2])
+        print(f"\n  {b('Accuracy by command family (weakest first):')}")
+        for k, ok, tot in rows[:10]:
+            pct = ok / tot * 100
+            col = r if pct < 60 else (y if pct < 85 else g)
+            print(f"    {k:16} {col(format(pct, '3.0f') + '%')}  ({ok}/{tot})")
+    print()
+
+
+def _toolmode(prog, fam):
+    return prog.setdefault("toolmode", {}).setdefault(
+        fam, {"learn": 0, "guided": [0, 0], "exam": [0, 0]})
+
+
+def ask_scenario(sc, prog, difficulty="practice"):
+    """Run one scenario to completion. Returns 'done','next','menu','level','quit'."""
+    sc, traps, soft = instantiate(sc)
+    fam = drill_key(sc)
+    tm = _toolmode(prog, fam)
+    bucket = "exam" if difficulty == "exam" else "guided"
+    print("\n" + "-" * 70)
+    print(f"{d(sc['domain'])}  {d('|')}  {c(sc['topic'])}  "
+          f"{d('|  obj ' + sc.get('obj', '?'))}  "
+          f"{d('. ' + DIFF_LABELS[difficulty])}")
+    print(f"\n{b('Scenario:')} {sc['prompt']}\n")
+    if difficulty in ("tutorial", "learn"):
+        render_teach(sc)
+        print()
+    if difficulty == "learn":
+        print(f"  {b('Copy it to build the pattern:')}  {c(sc['accept'][0])}\n")
+    hint_idx = 0
+    first_attempt = True
+    solved_clean = True
+    did_micro = False
+    box_cap = {"learn": 1, "tutorial": 3}.get(difficulty, 5)
+
+    while True:
+        ans = prompt_line(f"{g('$ ')}")
+        cmd = ans.strip()
+
+        if not cmd:
+            continue
+        if cmd in (":quit", ":q"):
+            return "quit"
+        if cmd in (":menu", ":m"):
+            return "menu"
+        if cmd in (":level", ":l"):
+            return "level"
+        if cmd in (":help", ":h", "?"):
+            print(HELP_TEXT)
+            continue
+        if cmd in (":stats", ":s"):
+            show_stats(prog)
+            continue
+        if cmd in (":skip", ":n"):
+            print(d(f"  (skipped - the answer was: {sc['accept'][0]})"))
+            return "next"
+        if cmd in (":hint",):
+            if difficulty == "exam":
+                print(d("  Hints are off in Exam mode. Answer it, "
+                        "or :answer to reveal / :skip to pass."))
+                continue
+            solved_clean = False
+            if hint_idx < len(sc["hints"]):
+                print(f"  {y('hint ' + str(hint_idx + 1) + ':')} "
+                      f"{sc['hints'][hint_idx]}")
+                hint_idx += 1
+            else:
+                print(d("  No more hints - type :answer to reveal it."))
+            continue
+        if cmd in (":answer", ":a", ":reveal"):
+            solved_clean = False
+            print(f"  {y('Answer:')} {b(sc['accept'][0])}")
+            print(f"  {d(sc['explain'])}")
+            prog["seen"] = prog.get("seen", 0) + 1
+            if difficulty != "learn":
+                tm[bucket][1] += 1
+            return "next"
+
+        # --- answer attempt ---
+        hit = check_answer(cmd, sc)
+        soft_hit = None
+        if not hit:
+            for sf in soft:
+                if check_answer(cmd, {"accept": sf["a"], "mode": "smart"}):
+                    soft_hit = sf
+                    hit = True
+                    break
+        if hit:
+            _, used_flags, _ = split_tokens(normalize(cmd).split())
+            _weak_clear(prog, fam, used_flags)
+            if difficulty == "learn":
+                tm["learn"] += 1
+                print(f"  {g('● Good copy.')}  {d(sc['explain'])}")
+                return "done"
+            prog["seen"] = prog.get("seen", 0) + 1
+            prog["correct"] = prog.get("correct", 0) + 1
+            _fam_record(prog, fam, True)
+            tm[bucket][1] += 1
+            tm[bucket][0] += 1
+            if first_attempt and solved_clean:
+                prog["first_try"] = prog.get("first_try", 0) + 1
+                prog["boxes"][sc["id"]] = min(box_cap, box_of(prog, sc["id"]) + 1)
+                tag = g("● Correct answer - first try! ")
+                if box_of(prog, sc["id"]) >= 5:
+                    tag += m("(mastered)")
+            else:
+                prog["boxes"][sc["id"]] = min(2, box_of(prog, sc["id"]) + 1)
+                tag = g("● Correct answer.")
+            print(f"  {tag}")
+            if soft_hit:
+                print(f"  {y('Note:')} {soft_hit['msg']}")
+            print(f"  {d(sc['explain'])}")
+            return "done"
+
+        # --- wrong ---
+        first_attempt = False
+        if difficulty == "learn":
+            diff = flag_diff(cmd, sc["accept"], fam)
+            print(f"  {r('● Not quite - it is right above you, no pressure.')}")
+            if diff:
+                render_diff(cmd, diff)
+            continue
+        _fam_record(prog, fam, False)
+        tm[bucket][1] += 1
+        prog["boxes"][sc["id"]] = 1
+        trap_msg = None
+        for tr in traps:
+            if check_answer(cmd, {"accept": tr["a"], "mode": "smart"}):
+                trap_msg = tr["msg"]
+                break
+        if trap_msg:
+            print(f"  {r('● Not quite.')} {y(trap_msg)}")
+            continue
+        if difficulty == "exam":
+            print(f"  {r('● Not quite.')} {d('Try again, or :answer / :skip')}")
+            continue
+        diff = flag_diff(cmd, sc["accept"], fam)
+        print(f"  {r('● Not quite.')}")
+        if diff is None:
+            print(d("  Different tool - re-read what the scenario is asking for."))
+        else:
+            render_diff(cmd, diff)
+            _weak_note(prog, fam, diff["missing"])
+            if diff["missing"] and not did_micro:
+                did_micro = True
+                micro_flag_check(fam, diff["missing"])
+                continue
+        print(f"  {d('Try again, or :hint / :answer / :skip')}")
+
+
+# --------------------------------------------------------------------------- #
+#  Gym modes: learn-a-tool, weak-flag drills, mastery report, weak-tool picker
+# --------------------------------------------------------------------------- #
+
+def fam_scenarios(fam):
+    return [s for s in SCENARIOS if drill_key(s) == fam]
+
+
+def exam_ready(prog, fam):
+    tm = prog.get("toolmode", {}).get(fam)
+    if not tm:
+        return False
+    gok, gtot = tm["guided"]
+    eok, etot = tm["exam"]
+    wf = prog.get("weakflags", {}).get(fam, {})
+    return (gtot >= 10 and gok / gtot >= 0.8 and not wf
+            and etot >= 5 and eok / etot >= 0.8)
+
+
+def tool_report(prog):
+    tms = prog.get("toolmode", {})
+    print(f"\n{b('=== Tool mastery ===')}")
+    if not tms:
+        print(d("  Nothing tracked yet - answer a few scenarios first.\n"))
+        return
+    rows = []
+    for fam, tm in tms.items():
+        gok, gtot = tm["guided"]
+        eok, etot = tm["exam"]
+        wf = sorted(prog.get("weakflags", {}).get(fam, {}))
+        gp = (gok / gtot * 100) if gtot else 0.0
+        rows.append((gp, fam, gok, gtot, eok, etot, wf,
+                     exam_ready(prog, fam), tm["learn"]))
+    rows.sort()
+    for gp, fam, gok, gtot, eok, etot, wf, ready, lrn in rows:
+        col = r if gtot and gp < 60 else (y if gtot and gp < 85 else g)
+        gtxt = col(f"{gok}/{gtot}") if gtot else d("0/0")
+        etxt = f"{eok}/{etot}" if etot else d("-")
+        wtxt = r(",".join(wf)) if wf else g("none")
+        rtxt = g("YES") if ready else d("not yet")
+        print(f"  {fam:14} learn {lrn:2}  guided {gtxt:>14}  exam {etxt:>5}  "
+              f"weak flags: {wtxt}  exam-ready: {rtxt}")
+    print()
+
+
+def pick_weak_family(prog):
+    """The family most in need of work."""
+    cands = [(v[0] / v[1], v[1], k) for k, v in prog.get("fam", {}).items()
+             if v[1] >= 4]
+    if cands:
+        cands.sort()
+        if cands[0][0] < 0.95:
+            return cands[0][2]
+    wfs = {k: sum(v.values()) for k, v in prog.get("weakflags", {}).items() if v}
+    if wfs:
+        return max(wfs, key=wfs.get)
+    return None
+
+
+def learn_tool(prog):
+    """Learn Mode: intro -> 2 copy reps -> guided attempts on that tool."""
+    touched = set(prog.get("fam", {}))
+    fams = sorted({drill_key(s) for s in SCENARIOS})
+    fresh = [f for f in fams if f not in touched] or fams
+    print(f"\n{b('Pick a tool to learn:')}")
+    for i, f in enumerate(fresh[:10], 1):
+        n = len(fam_scenarios(f))
+        print(f"  {c(str(i))}  {f}  {d('(' + str(n) + ' scenarios)')}")
+    choice = prompt_line(f"\n{g('tool> ')}").strip().lower()
+    if choice in (":quit", ":q"):
+        return "quit"
+    if choice.isdigit() and 1 <= int(choice) <= len(fresh[:10]):
+        fam = fresh[int(choice) - 1]
+    elif choice in fams:
+        fam = choice
+    else:
+        print(r("  Pick a number from the list."))
+        return "menu"
+    pool = fam_scenarios(fam)
+    sc0, _, _ = instantiate(pool[0])
+    print(f"\n{b('=== Learning: ' + fam + ' ===')}")
+    render_teach(sc0)
+    # copy reps: 2 distinct canonical commands
+    cmds = [sc0["accept"][0]]
+    for dr in DRILLS.get(fam, [])[:1]:
+        cmds.append(dr["a"][0])
+    tm = _toolmode(prog, fam)
+    for cmdtext in cmds[:2]:
+        print(f"\n  {b('Copy this command:')}  {c(cmdtext)}")
+        while True:
+            ans = prompt_line(f"  {g('$ ')}").strip()
+            if ans in (":quit", ":q"):
+                return "quit"
+            if ans in (":menu", ":m", ":skip", ":n"):
+                break
+            if check_answer(ans, {"accept": [cmdtext], "mode": "smart"}):
+                tm["learn"] += 1
+                print(f"  {g('● Good copy.')}")
+                break
+            diff = flag_diff(ans, [cmdtext], fam)
+            print(f"  {r('● Almost - check it against the line above.')}")
+            if diff:
+                render_diff(ans, diff)
+    print(f"\n  {b('Now without the answer in front of you:')}")
+    return study_loop(pool, "tutorial", prog, session_len=5,
+                      label=f"learning {fam}")
+
+
+def weak_flag_drill(prog):
+    """Rapid-fire: which flag means X? Clears weak-flag debt."""
+    items = [(fam, fl) for fam, d_ in prog.get("weakflags", {}).items()
+             for fl in d_]
+    if not items:
+        print(g("\n  No weak flags right now - nicely done. "
+                "Misses will land here automatically.\n"))
+        return "menu"
+    random.shuffle(items)
+    print(f"\n{b('Weak-flag drill')} {d('- ' + str(len(items)) + ' to clear. Enter answers, :menu to stop.')}")
+    qn = 0
+    for fam, fl in items[:10]:
+        meaning = _flag_meaning(fam, fl)
+        if not meaning:
+            continue
+        qn += 1
+        print(f"\n  {c(str(qn))}. In {b(fam)}, which flag means "
+              f"{b(chr(39) + meaning + chr(39))}?")
+        ans = prompt_line(f"  {g('flag> ')}").strip()
+        if ans in (":quit", ":q"):
+            return "quit"
+        if ans in (":menu", ":m"):
+            return "menu"
+        if ans and ans.lstrip("-+") == fl.lstrip("-+"):
+            print(f"  {g('● Right:')} {fl}")
+            _weak_clear(prog, fam, [fl])
+        else:
+            print(f"  {r('●')} {y('It is')} {b(fl)} - {meaning}")
+            _weak_note(prog, fam, [fl])
+    left = sum(len(v) for v in prog.get("weakflags", {}).values())
+    print(f"\n  {g('Drill done.')} {d(str(left) + ' weak-flag reps still owed.')}")
+    return "menu"
+
+
+def study_loop(pool, difficulty, prog, session_len=8, label=""):
+    """Core loop with finishable session checkpoints."""
+    last_id = None
+    answered = 0
+    start_correct = prog.get("correct", 0)
+    while True:
+        sc = weighted_pick(pool, prog, exclude=last_id if len(pool) > 1 else None)
+        last_id = sc["id"]
+        result = ask_scenario(sc, prog, difficulty)
+        if result == "done" and difficulty in ("tutorial", "learn"):
+            result = drill_loop(sc, prog)
+        if result in ("quit", "menu"):
+            return result
+        if result == "level":
+            new = choose_difficulty()
+            if new is None:
+                return "quit"
+            difficulty = new
+            print(d(f"\n  Switched to {DIFF_LABELS[difficulty]} mode."))
+            continue
+        answered += 1
+        if answered % session_len == 0:
+            got = prog.get("correct", 0) - start_correct
+            print(f"\n  {m('--- Session checkpoint ---')}")
+            print(f"  {b(str(answered) + ' scenarios')} this session, "
+                  f"{g(str(got) + ' correct')}"
+                  + (f"  {d('(' + label + ')')}" if label else ""))
+            print(d("  [Enter] keep going    [m] main menu    [:quit] save & exit"))
+            ch = prompt_line(f"{g('> ')}").strip().lower()
+            if ch in (":quit", ":q"):
+                return "quit"
+            if ch in ("m", ":menu", ":m"):
+                return "menu"
+
+
+def main_menu(prog):
+    weak = pick_weak_family(prog)
+    wf_count = sum(len(v) for v in prog.get("weakflags", {}).values())
+    print(f"\n{b('What do you want to do?')}")
+    print(f"  {c('1')}  Learn a new tool      {d('(intro + copy practice)')}")
+    rec = f"  {m('<- recommended')}" if weak else ""
+    wdesc = f"({weak})" if weak else "(nothing flagged yet)"
+    print(f"  {c('2')}  Continue weak tool    {d(wdesc)}{rec}")
+    print(f"  {c('3')}  Drill weak flags      "
+          f"{d('(' + str(wf_count) + ' owed)')}")
+    print(f"  {c('4')}  Scenario practice     {d('(pick a domain, hints on demand)')}")
+    print(f"  {c('5')}  Mixed exam mode       {d('(everything, no scaffolding)')}")
+    print(f"  {c('6')}  Progress")
+    print(f"  {c('q')}  Save and quit")
+    while True:
+        ch = prompt_line(f"\n{g('menu> ')}").strip().lower()
+        if ch in ("q", ":quit", ":q"):
+            return "quit"
+        if ch in ("1", "2", "3", "4", "5", "6"):
+            return ch
+        print(r("  Pick 1-6 or q."))
+
+
+def run():
+    # ---- args ----
+    args = sys.argv[1:]
+    progress_path = PROGRESS_PATH
+    if "--no-color" in args or os.environ.get("NO_COLOR") or not sys.stdout.isatty():
+        C.enabled = False
+    if "--progress" in args:
+        i = args.index("--progress")
+        if i + 1 < len(args):
+            progress_path = os.path.expanduser(args[i + 1])
+    if "--reset" in args:
+        try:
+            os.remove(progress_path)
+        except OSError:
+            pass
+
+    prog = load_progress(progress_path)
+
+    def opt(name):
+        if name in args:
+            i = args.index(name)
+            if i + 1 < len(args):
+                return args[i + 1]
+        return None
+
+    session_len = 8
+    if opt("--session") and opt("--session").isdigit():
+        session_len = max(3, int(opt("--session")))
+    cli_level = opt("--level")
+    if cli_level is not None and cli_level not in DIFF_LABELS:
+        print(r(f"Unknown --level '{cli_level}' (learn/tutorial/practice/exam)"))
+        cli_level = None
+    pool = None
+    pool_desc = ""
+    topic = opt("--topic")
+    objective = opt("--objective")
+    if "--weak" in args:
+        pool = filter_scenarios("weak", None, prog)
+        pool_desc = "weak spots"
+    elif topic:
+        tl = topic.lower()
+        pool = [s for s in SCENARIOS
+                if drill_key(s) == tl or tl == s["topic"].lower()
+                or (len(tl) >= 4 and tl in s["topic"].lower())]
+        pool_desc = f"topic '{topic}'"
+    elif objective:
+        pool = [s for s in SCENARIOS if s.get("obj", "").startswith(objective)]
+        pool_desc = f"objective {objective}"
+    if pool is not None and not pool:
+        print(r(f"  No scenarios match {pool_desc} - opening the menu."))
+        pool = None
+
+    print(c(BANNER))
+    print(d("  Nothing you type is executed. This only checks your answer against"))
+    print(d("  the expected command, so practice freely - your system is untouched."))
+    print(HELP_TEXT)
+    print(d("  CLI: --weak | --topic <tool> | --objective <N.N> | "
+            "--level <mode> | --session <N>"))
+
+    def bye():
+        save_progress(progress_path, prog)
+        show_stats(prog)
+        print(g("Progress saved to ") + d(progress_path))
+        print(g("Keep at it - see you next session.\n"))
+
+    # CLI fast path: jump straight into a study loop
+    if pool is not None:
+        difficulty = cli_level or choose_difficulty()
+        if difficulty is None:
+            bye()
+            return
+        print(d(f"\n  Pool: {pool_desc} ({len(pool)} scenarios) - "
+                f"{DIFF_LABELS[difficulty]} mode"))
+        res = study_loop(pool, difficulty, prog, session_len, pool_desc)
+        save_progress(progress_path, prog)
+        if res == "quit":
+            bye()
+            return
+        # fall through to the menu on :menu
+
+    while True:
+        choice = main_menu(prog)
+        save_progress(progress_path, prog)
+        if choice == "quit":
+            bye()
+            return
+        if choice == "1":
+            res = learn_tool(prog)
+        elif choice == "2":
+            fam = pick_weak_family(prog)
+            if fam is None:
+                print(d("\n  Nothing flagged as weak yet - do a round of "
+                        "scenario practice first (option 4)."))
+                continue
+            wf = sorted(prog.get("weakflags", {}).get(fam, {}))
+            extra = f" - weak flags: {', '.join(wf)}" if wf else ""
+            print(d(f"\n  Focusing on {fam}{extra}"))
+            res = study_loop(fam_scenarios(fam), "tutorial", prog,
+                             session_len, f"weak tool: {fam}")
+        elif choice == "3":
+            res = weak_flag_drill(prog)
+        elif choice == "4":
+            difficulty = cli_level or "practice"
+            kind, value = choose_domain()
+            if kind is None:
+                res = "quit"
+            else:
+                res = study_loop(filter_scenarios(kind, value, prog),
+                                 difficulty, prog, session_len)
+        elif choice == "5":
+            res = study_loop(SCENARIOS, "exam", prog, session_len, "mixed exam")
+        else:
+            show_stats(prog)
+            tool_report(prog)
+            res = "menu"
+        save_progress(progress_path, prog)
+        if res == "quit":
+            bye()
+            return
+
+
+if __name__ == "__main__":
+    run()

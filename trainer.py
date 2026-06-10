@@ -36,6 +36,9 @@ import re
 import sys
 import textwrap
 
+# Bump on EVERY delivered change: major.minor.patch
+__version__ = "2.1.0"
+
 # --------------------------------------------------------------------------- #
 #  Scenario bank  (all original, written from the published XK0-006 objectives)
 #  schema:
@@ -2728,13 +2731,12 @@ def m(t): return C.wrap(C.MAG, t)
 
 
 BANNER = r"""
-  ______          ___              _
- |__  / ___  _ _ / _ \  _ _  ___  __| |
-   / / / -_)| '_|| | | || '_|/ -_)/ _` |
-  /___|\___||_|   \___/ |_|  \___|\__,_|
-
-        CompTIA Linux+  XK0-006   *  Command Gym  *  safe & offline
-"""
+███████╗███████╗██████╗  ██████╗ ██████╗ ███████╗██████╗
+╚══███╔╝██╔════╝██╔══██╗██╔═████╗██╔══██╗██╔════╝██╔══██╗
+  ███╔╝ █████╗  ██████╔╝██║██╔██║██████╔╝█████╗  ██║  ██║
+ ███╔╝  ██╔══╝  ██╔══██╗████╔╝██║██╔══██╗██╔══╝  ██║  ██║
+███████╗███████╗██║  ██║╚██████╔╝██║  ██║███████╗██████╔╝
+╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝"""
 
 
 # --------------------------------------------------------------------------- #
@@ -3365,6 +3367,9 @@ def main_menu(prog):
 def run():
     # ---- args ----
     args = sys.argv[1:]
+    if "--version" in args or "-V" in args:
+        print(f"Zer0red Linux+ trainer v{__version__}")
+        return
     progress_path = PROGRESS_PATH
     if "--no-color" in args or os.environ.get("NO_COLOR") or not sys.stdout.isatty():
         C.enabled = False
@@ -3414,7 +3419,8 @@ def run():
         print(r(f"  No scenarios match {pool_desc} - opening the menu."))
         pool = None
 
-    print(c(BANNER))
+    print(r(BANNER))
+    print(c(f"  CompTIA Linux+ XK0-006  *  Command Gym  *  v{__version__}"))
     print(d("  Nothing you type is executed. This only checks your answer against"))
     print(d("  the expected command, so practice freely - your system is untouched."))
     print(HELP_TEXT)

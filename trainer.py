@@ -37,7 +37,7 @@ import sys
 import textwrap
 
 # Bump on EVERY delivered change: major.minor.patch
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 
 # --------------------------------------------------------------------------- #
 #  Scenario bank  (all original, written from the published XK0-006 objectives)
@@ -2763,6 +2763,7 @@ def instantiate(sc):
     keys = set(re.findall(r"\{([a-z]+)\}", blob))
     vals = {k: random.choice(PARAM_POOLS[k]) for k in keys if k in PARAM_POOLS}
     inst = dict(sc)
+    inst["_vals"] = vals
     for f in ("prompt", "explain"):
         if f in tpl:
             inst[f] = _subst(tpl[f], vals)
@@ -2931,6 +2932,276 @@ FLAG_INFO = {
     "pip": {}, "stat": {}, "touch": {}, "mv": {}, "id": {},
     "bash-basics": {}, "redirection": {}, "less": {}, "xargs": {},
 }
+
+
+# --------------------------------------------------------------------------- #
+#  Simulated command output - shown after a correct answer so it feels like a
+#  real shell. Commands that are silent on success (chmod, kill, usermod...)
+#  deliberately have NO entry: silence IS their real output.
+# --------------------------------------------------------------------------- #
+
+SIM_OUTPUT = {
+    "ts-ss-listen": """Netid State  Recv-Q Send-Q Local Address:Port  Peer  Process
+udp   UNCONN 0      0          0.0.0.0:53    *     users:(("systemd-resolve",pid=611,fd=13))
+tcp   LISTEN 0      128        0.0.0.0:22    *     users:(("sshd",pid=812,fd=3))
+tcp   LISTEN 0      511        0.0.0.0:80    *     users:(("nginx",pid=1490,fd=6))""",
+    "ts-ip-addr": """1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN
+    inet 127.0.0.1/8 scope host lo
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP
+    inet 192.168.1.40/24 brd 192.168.1.255 scope global eth0""",
+    "ts-ip-route": """default via 192.168.1.1 dev eth0 proto dhcp metric 100
+192.168.1.0/24 dev eth0 proto kernel scope link src 192.168.1.40""",
+    "ts-dig": """;; ANSWER SECTION:
+example.com.        2864    IN      A       93.184.215.14
+
+;; Query time: 18 msec
+;; SERVER: 192.168.1.1#53(192.168.1.1)""",
+    "ts-mtr": "(live per-hop loss/latency display opens - press q to quit)",
+    "ts-tcpdump": """tcpdump: listening on eth0, link-type EN10MB (Ethernet)
+14:02:11.482 IP 192.168.1.40.52814 > 93.184.215.14.443: Flags [S], length 0
+14:02:11.503 IP 93.184.215.14.443 > 192.168.1.40.52814: Flags [S.], length 0
+^C 2 packets captured""",
+    "ts-free": """               total        used        free      shared  buff/cache   available
+Mem:           7.7Gi       2.1Gi       3.4Gi       312Mi       2.2Gi       5.1Gi
+Swap:          2.0Gi          0B       2.0Gi""",
+    "ts-vmstat": """procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+ 1  0      0 3563012 142020 2174980    0    0     4    11  182  301  2  1 97  0  0""",
+    "ts-iostat": """Device      r/s     w/s     rkB/s   wkB/s  await  %util
+sda        4.12   11.30    88.4   412.6   1.84   2.1
+sdb        0.02    0.00     0.4     0.0   0.61   0.0""",
+    "ts-uptime": " 14:02:36 up 12 days,  3:41,  2 users,  load average: 0.18, 0.24, 0.21",
+    "ts-journal-priority": """Jun 09 03:12:44 lab sshd[9911]: error: kex_exchange_identification: read: reset
+Jun 09 07:55:02 lab kernel: EXT4-fs error (device sdb1): unable to read inode
+Jun 10 11:21:18 lab nginx[1490]: [emerg] bind() to 0.0.0.0:80 failed""",
+    "log-journalctl-unit": """Jun 10 08:14:02 lab sshd[812]: Server listening on 0.0.0.0 port 22.
+Jun 10 09:30:51 lab sshd[4471]: Accepted publickey for marco from 10.0.0.8
+Jun 10 09:30:51 lab sshd[4471]: pam_unix(sshd:session): session opened for user marco""",
+    "log-journalctl-follow": """-- Journal begins, following new entries (Ctrl+C to stop) --
+Jun 10 14:02:40 lab systemd[1]: Started Daily apt download activities.""",
+    "sd-status": """\u25cf nginx.service - A high performance web server
+     Loaded: loaded (/usr/lib/systemd/system/nginx.service; enabled)
+     Active: active (running) since Tue 2026-06-09 08:14:02 UTC; 1 day ago
+   Main PID: 1490 (nginx)
+Jun 09 08:14:02 lab systemd[1]: Started A high performance web server.""",
+    "sd-enable-now": """Created symlink /etc/systemd/system/multi-user.target.wants/sshd.service \u2192 /usr/lib/systemd/system/sshd.service.""",
+    "sd-mask": "Created symlink /etc/systemd/system/bluetooth.service \u2192 /dev/null.",
+    "ts-systemd-blame": """41.203s plymouth-quit-wait.service
+12.844s NetworkManager-wait-online.service
+ 4.071s snapd.service
+ 1.302s dev-sda2.device""",
+    "dev-lsblk": """NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+sda      8:0    0   100G  0 disk
+\u251csda1   8:1    0     1G  0 part /boot
+\u2514sda2   8:2    0    99G  0 part /
+sdb      8:16   0   500G  0 disk""",
+    "dev-dmesg": """[Tue Jun 10 08:13:51 2026] e1000e 0000:00:19.0 eth0: link is Up 1000 Mbps
+[Tue Jun 10 08:13:52 2026] EXT4-fs (sda2): mounted filesystem with ordered data mode
+[Tue Jun 10 11:40:13 2026] usb 1-2: new high-speed USB device number 4""",
+    "dev-modinfo": """filename:       /lib/modules/6.8.0/kernel/drivers/net/ethernet/intel/e1000e.ko
+description:    Intel(R) PRO/1000 Network Driver
+license:        GPL v2
+depends:        ptp""",
+    "dev-dracut": "dracut: *** Creating initramfs image file '/boot/initramfs-6.8.0.img' done ***",
+    "stor-blkid": """/dev/sda1: UUID="6e0c-1A2B" TYPE="vfat" PARTUUID="0001"
+/dev/sda2: UUID="b1c2d3e4-5f60-4a7b-8c9d-aabbccddeeff" TYPE="ext4"
+""",
+    "stor-fdisk": """Disk /dev/sda: 100 GiB, 107374182400 bytes, 209715200 sectors
+Device     Boot   Start       End   Sectors  Size Type
+/dev/sda1  *       2048   2099199   2097152    1G Linux filesystem
+/dev/sda2       2099200 209715166 207615967   99G Linux filesystem""",
+    "stor-parted": """Model: ATA VBOX HARDDISK (scsi)
+Disk /dev/sda: 107GB   Partition Table: gpt
+ 1      1049kB  1075MB  1074MB  ext4         boot
+ 2      1075MB  107GB   106GB   ext4""",
+    "fs-df": """Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda2        97G   31G   62G  34% /
+/dev/sda1       974M  201M  706M  23% /boot
+tmpfs           3.9G     0  3.9G   0% /dev/shm""",
+    "fs-du": "1.4G    /var/log",
+    "fs-fsck": """fsck from util-linux 2.39
+e2fsck 1.47.0: clean, 84211/6553600 files, 8123456/26214400 blocks""",
+    "fs-mkfs": """mke2fs 1.47.0 (5-Feb-2023)
+Creating filesystem with 26214400 4k blocks and 6553600 inodes
+Writing superblocks and filesystem accounting information: done""",
+    "fs-resize2fs": """resize2fs 1.47.0
+The filesystem on /dev/datavg/web is now 6553600 (4k) blocks long.""",
+    "fs-xfsgrow": """meta-data=/dev/mapper/datavg-data isize=512  agcount=4
+data blocks changed from 2621440 to 3932160""",
+    "lvm-pvcreate": '  Physical volume "/dev/sdb" successfully created.',
+    "lvm-vgcreate": '  Volume group "datavg" successfully created',
+    "lvm-lvcreate": '  Logical volume "{lv}" created.',
+    "lvm-lvextend": """  Size of logical volume datavg/web changed from 20.00 GiB to 25.00 GiB.
+  Logical volume datavg/web successfully resized.
+resize2fs: The filesystem on /dev/datavg/web is now 6553600 (4k) blocks long.""",
+    "backup-rsync": """sending incremental file list
+data/reports/q2.xlsx
+data/db/dump.sql
+sent 48.21M bytes  received 1.2K bytes  9.64M bytes/sec""",
+    "bk-dd": """4294967296 bytes (4.3 GB, 4.0 GiB) copied, 18 s, 239 MB/s
+1024+0 records in
+1024+0 records out""",
+    "sw-apt-install": """Reading package lists... Done
+The following NEW packages will be installed: htop
+Setting up htop (3.3.0-4) ...""",
+    "sw-dnf-install": """Dependencies resolved.
+Installing:  httpd  x86_64  2.4.62-1.el9
+Complete!""",
+    "sw-dpkg": """Selecting previously unselected package agent.
+Unpacking agent (1.4.2) ...
+Setting up agent (1.4.2) ...""",
+    "sw-rpmqa": """bash-5.2.26-1.el9.x86_64
+openssh-server-8.7p1-38.el9.x86_64
+httpd-2.4.62-1.el9.x86_64
+kernel-5.14.0-427.el9.x86_64""",
+    "sw-pip": """Collecting requests
+Installing collected packages: requests
+Successfully installed requests-2.32.3""",
+    "user-getent": "alice:x:1001:1001::/home/alice:/bin/bash",
+    "user-chage": """Last password change                    : Apr 02, 2026
+Password expires                        : never
+Account expires                         : never
+Number of days of warning before password expires: 7""",
+    "sec-restorecon": """Relabeled /var/www/html from unconfined_u:object_r:user_home_t:s0 to unconfined_u:object_r:httpd_sys_content_t:s0
+Relabeled /var/www/html/index.html from user_home_t to httpd_sys_content_t""",
+    "sec-firewalld-port": "success",
+    "sec-firewalld-reload": "success",
+    "sec-ufw-allow": """Rule added
+Rule added (v6)""",
+    "fw-iptables": """Chain INPUT (policy ACCEPT 8412 packets, 1204K bytes)
+ pkts bytes target  prot opt in  out  source     destination
+ 1204  72K  ACCEPT  tcp  --  *   *    0.0.0.0/0  0.0.0.0/0   tcp dpt:22""",
+    "fw-nft": """table inet filter {
+    chain input {
+        type filter hook input priority filter; policy accept;
+        tcp dport 22 accept
+    }
+}""",
+    "sec-sshkeygen": """Generating public/private ed25519 key pair.
+Enter file in which to save the key (/home/marco/.ssh/id_ed25519):
+Your identification has been saved in /home/marco/.ssh/id_ed25519
+The key fingerprint is: SHA256:Yk3l+f9...
+""",
+    "sec-find-suid": """/usr/bin/sudo
+/usr/bin/passwd
+/usr/bin/mount
+/usr/bin/su""",
+    "sec-visudo": "(sudoers opens in vi - syntax is checked when you save)",
+    "sched-crontab-edit": "(your crontab opens in $EDITOR)",
+    "shell-grep": """/var/log/syslog:Jun 10 11:21:18 lab nginx[1490]: [error] connect() failed
+/var/log/auth.log:Jun 10 09:02:33 lab sshd[3120]: error: maximum authentication attempts
+/var/log/dpkg.log.1:2026-05-28 status error linux-image-6.8.0""",
+    "shell-find-size": """/var/lib/mysql/ibdata1
+/var/log/journal/system.journal
+/home/marco/Downloads/ubuntu-24.04.iso""",
+    "shell-sort-uniq": """   412 GET /index.html HTTP/1.1
+    96 GET /api/status HTTP/1.1
+     3 POST /login HTTP/1.1""",
+    "proc-ps": """USER   PID %CPU %MEM    VSZ   RSS TTY  STAT START  TIME COMMAND
+root     1  0.0  0.3 168092 12844 ?    Ss   Jun09  0:04 /sbin/init
+root   812  0.0  0.2  15436  8920 ?    Ss   Jun09  0:00 sshd: /usr/sbin/sshd
+mysql 1322  0.4  9.8 1825040 392k ?    Ssl  Jun09  6:12 /usr/sbin/mysqld""",
+    "proc-lsof-port": """COMMAND  PID  USER  FD  TYPE DEVICE SIZE/OFF NODE NAME
+nginx   1490  root   6u IPv4  24812      0t0  TCP *:http (LISTEN)""",
+    "proc-renice": "{pid} (process ID) old priority 0, new priority 10",
+    "proc-nohup": """[1] 23981
+nohup: ignoring input and appending output to 'nohup.out'""",
+    "virt-virsh-list": """ Id   Name     State
+----------------------------
+ 1    webvm    running
+ -    buildvm  shut off""",
+    "ctr-run": "9f2c1a7e44b85d3f0a6c2b91e8d7f4a5c3b2a1908f7e6d5c4b3a291807f6e5d4",
+    "ctr-ps": """CONTAINER ID  IMAGE                 STATUS         PORTS                 NAMES
+3fa8b2c91d04  docker.io/nginx:latest  Up 2 hours   0.0.0.0:8080->80/tcp  web
+71c0de55ab12  docker.io/redis:7       Exited (0)                         cache""",
+    "ctr-logs": """10.0.0.8 - - [10/Jun/2026:13:58:11 +0000] "GET / HTTP/1.1" 200 615
+10.0.0.8 - - [10/Jun/2026:13:58:12 +0000] "GET /favicon.ico HTTP/1.1" 404 153""",
+    "ctr-exec": "root@3fa8b2c91d04:/#",
+    "ctr-build": """STEP 1/4: FROM docker.io/library/python:3.12-slim
+STEP 4/4: CMD ["python", "app.py"]
+COMMIT myapp:1.0
+Successfully tagged localhost/myapp:1.0""",
+    "ctr-prune": """3a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d
+Total reclaimed space: 412MB""",
+    "auto-ansible-ping": """web01 | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}""",
+    "auto-ansible-playbook": """PLAY [all] *********************************************************
+TASK [Gathering Facts] *********************************************
+PLAY RECAP: web01 : ok=4  changed=1  unreachable=0  failed=0""",
+    "auto-kubectl-apply": "deployment.apps/web configured",
+    "auto-kubectl-scale": "deployment.apps/web scaled",
+    "auto-compose-up": """[+] Running 3/3
+ \u2714 Network app_default    Created
+ \u2714 Container app-db-1     Started
+ \u2714 Container app-web-1    Started""",
+    "auto-git-commit": """[main 4f2a91c] fix deploy script
+ 1 file changed, 3 insertions(+), 1 deletion(-)""",
+    "net-ping": """PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=117 time=11.2 ms
+64 bytes from 8.8.8.8: icmp_seq=4 ttl=117 time=10.8 ms
+--- 8.8.8.8 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss""",
+    "net-traceroute": """traceroute to 8.8.8.8 (8.8.8.8), 30 hops max
+ 1  _gateway (192.168.1.1)  0.612 ms
+ 2  10.20.0.1 (10.20.0.1)   4.310 ms
+ 5  dns.google (8.8.8.8)   11.027 ms""",
+    "net-nmap": """Nmap scan report for 10.0.0.5
+PORT    STATE SERVICE
+22/tcp  open  ssh
+80/tcp  open  http
+443/tcp open  https""",
+    "net-nc": "Connection to web01 22 port [tcp/ssh] succeeded!",
+    "net-curl": """HTTP/2 200
+content-type: text/html; charset=UTF-8
+cache-control: max-age=2890
+server: ECAcc (dcd/7D5A)""",
+    "net-nmcli": """DEVICE  TYPE      STATE      CONNECTION
+eth0    ethernet  connected  Wired connection 1
+lo      loopback  unmanaged  --""",
+    "net-netplan": """Do you want to keep these settings?
+Press ENTER before the timeout to accept the new configuration
+Changes will revert in 120 seconds""",
+    "net-ethtool": """Settings for eth0:
+        Speed: 1000Mb/s
+        Duplex: Full
+        Auto-negotiation: on
+        Link detected: yes""",
+    "sys-timedatectl": """               Local time: Wed 2026-06-10 14:02:36 UTC
+           Universal time: Wed 2026-06-10 14:02:36 UTC
+                 Timezone: Etc/UTC (UTC, +0000)
+System clock synchronized: yes
+              NTP service: active""",
+    "sys-sysctl": "net.ipv4.ip_forward = 1",
+    "ts-lastb": """root     ssh:notty    203.0.113.50     Tue Jun 10 03:12 - 03:12  (00:00)
+admin    ssh:notty    203.0.113.50     Tue Jun 10 03:12 - 03:12  (00:00)
+root     ssh:notty    198.51.100.23    Mon Jun  9 22:41 - 22:41  (00:00)""",
+    "text-head": """Jun 10 08:13:48 lab kernel: Linux version 6.8.0-39-generic
+Jun 10 08:13:48 lab kernel: Command line: BOOT_IMAGE=/vmlinuz-6.8.0
+... (18 more lines)""",
+    "text-tailf": """Jun 10 14:02:36 lab systemd[1]: Started Session 12 of User marco.
+Jun 10 14:02:40 lab CRON[24001]: (root) CMD (command -v debian-sa1)
+(following - Ctrl+C to stop)""",
+    "text-cut": """root
+daemon
+alice
+marco""",
+    "text-wc": "10422 access.log",
+    "text-sed": """server_name example.com;
+proxy_pass https://backend:8443;
+return 301 https://$host$request_uri;""",
+    "text-awk": """10.0.0.8
+192.168.1.77
+10.0.0.8""",
+    "text-tee": """Deploying version 1.4.2...
+Done. (output also written to deploy.log)""",
+    "perm-su": "root@lab:~#",
+    "perm-sudoi": "root@lab:~#",
+    "backup-tar-extract": "(archive extracted to the current directory)",
+    "sw-apt-install-note": "",
+}
+
 
 
 def _flag_meaning(fam, tok):
@@ -3125,6 +3396,14 @@ def ok(t): return g("\u25cf " + t)     # green dot + green text
 def bad(t): return r("\u25cf " + t)    # red dot + red text
 
 
+CLEAR_OK = [True]   # disabled by --no-clear or when output is piped
+
+
+def clear_screen():
+    if CLEAR_OK[0]:
+        print("\033[2J\033[H", end="")
+
+
 BANNER = r"""
 ███████╗███████╗██████╗  ██████╗ ██████╗ ███████╗██████╗
 ╚══███╔╝██╔════╝██╔══██╗██╔═████╗██╔══██╗██╔════╝██╔══██╗
@@ -3310,6 +3589,8 @@ def run_drill(dr, prog, tool, rep):
             prog["drill_reps"] = prog.get("drill_reps", 0) + 1
             prog["drill_correct"] = prog.get("drill_correct", 0) + 1
             _fam_record(prog, tool, True)
+            print()
+            print(f"{g('user@lab')}{d(':')}{c('~')}{d('$')} {ans}")
             line = g("● Correct answer.")
             if dr.get("e"):
                 line += "  " + d(dr["e"])
@@ -3356,6 +3637,7 @@ def drill_loop(sc, prog):
             print(d("  Press Enter for another rep, or n to move on."))
             continue
         rep += 1
+        clear_screen()
         if bank:
             dr = bank[order[idx]]
             idx += 1
@@ -3505,6 +3787,14 @@ def ask_scenario(sc, prog, difficulty="practice"):
         if hit:
             _, used_flags, _ = split_tokens(normalize(cmd).split())
             _weak_clear(prog, fam, used_flags)
+            print()
+            print(f"{g('user@lab')}{d(':')}{c('~')}{d('$')} {cmd}")
+            _sim = SIM_OUTPUT.get(sc["id"])
+            if _sim:
+                vals = sc.get("_vals")
+                if vals:
+                    _sim = _subst(_sim, vals)
+                print(_sim)
             if difficulty == "learn":
                 tm["learn"] += 1
                 print(f"  {g('● Good copy.')}  {d(sc['explain'])}")
@@ -3795,6 +4085,7 @@ def study_loop(pool, difficulty, prog, session_len=8, label=""):
     last_id = None
     answered = 0
     start_correct = prog.get("correct", 0)
+    clear_screen()
     while True:
         sc = weighted_pick(pool, prog, exclude=last_id if len(pool) > 1 else None)
         last_id = sc["id"]
@@ -3823,6 +4114,15 @@ def study_loop(pool, difficulty, prog, session_len=8, label=""):
                 return "quit"
             if ch in ("m", ":menu", ":m"):
                 return "menu"
+            clear_screen()
+        else:
+            print(d("\n  [Enter] next question    [m] menu    [:quit] save & exit"))
+            ch = prompt_line(f"{g('> ')}").strip().lower()
+            if ch in (":quit", ":q"):
+                return "quit"
+            if ch in ("m", ":menu", ":m"):
+                return "menu"
+            clear_screen()
 
 
 def main_menu(prog):
@@ -3852,6 +4152,7 @@ def run():
     progress_path = PROGRESS_PATH
     if "--no-color" in args or os.environ.get("NO_COLOR") or not sys.stdout.isatty():
         C.enabled = False
+    CLEAR_OK[0] = sys.stdout.isatty() and "--no-clear" not in args
     if "--progress" in args:
         i = args.index("--progress")
         if i + 1 < len(args):

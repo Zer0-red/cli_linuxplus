@@ -37,7 +37,7 @@ import sys
 import textwrap
 
 # Bump on EVERY delivered change: major.minor.patch
-__version__ = "2.5.1"
+__version__ = "2.5.2"
 
 # --------------------------------------------------------------------------- #
 #  Scenario bank  (all original, written from the published XK0-006 objectives)
@@ -3662,10 +3662,11 @@ def run_drill(dr, prog, tool, rep):
             _fam_record(prog, tool, True)
             print()
             print(f"{g('user@lab')}{d(':')}{c('~')}{d('$')} {ans}")
-            line = g("● Correct answer.")
+            print()
+            print(f"  {g('● Correct answer.')}")
             if dr.get("e"):
-                line += "  " + d(dr["e"])
-            print(f"  {line}")
+                print()
+                print(f"  {d(dr['e'])}")
             return "ok"
         _fam_record(prog, tool, False)
         diff = flag_diff(ans, dr["a"], tool)
@@ -3840,6 +3841,7 @@ def ask_scenario(sc, prog, difficulty="practice"):
         if cmd in (":answer", ":a", ":reveal"):
             solved_clean = False
             print(f"  {y('Answer:')} {b(sc['accept'][0])}")
+            print()
             print(f"  {d(sc['explain'])}")
             prog["seen"] = prog.get("seen", 0) + 1
             if difficulty != "learn":
@@ -3868,7 +3870,10 @@ def ask_scenario(sc, prog, difficulty="practice"):
                 print(_sim)
             if difficulty == "learn":
                 tm["learn"] += 1
-                print(f"  {g('● Good copy.')}  {d(sc['explain'])}")
+                print()
+                print(f"  {g('● Good copy.')}")
+                print()
+                print(f"  {d(sc['explain'])}")
                 return "done"
             prog["seen"] = prog.get("seen", 0) + 1
             prog["correct"] = prog.get("correct", 0) + 1
@@ -3884,9 +3889,11 @@ def ask_scenario(sc, prog, difficulty="practice"):
             else:
                 prog["boxes"][sc["id"]] = min(2, box_of(prog, sc["id"]) + 1)
                 tag = g("● Correct answer.")
+            print()
             print(f"  {tag}")
             if soft_hit:
                 print(f"  {y('Note:')} {soft_hit['msg']}")
+            print()
             print(f"  {d(sc['explain'])}")
             return "done"
 

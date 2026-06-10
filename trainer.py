@@ -37,7 +37,7 @@ import sys
 import textwrap
 
 # Bump on EVERY delivered change: major.minor.patch
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 
 # --------------------------------------------------------------------------- #
 #  Scenario bank  (all original, written from the published XK0-006 objectives)
@@ -1029,6 +1029,397 @@ SCENARIOS = [
         "explain": "`uptime` prints the 1/5/15-minute load averages. Compare against "
                    "your CPU core count: load well above core count = saturation.",
     },
+
+    # ------------------ FILES & NAVIGATION (2.1) --------------------------- #
+    {"id": "files-ls", "domain": "1.0 System Management", "topic": "Files",
+     "prompt": "List everything in the current directory: long format, including "
+               "hidden files, with human-readable sizes.",
+     "accept": ["ls -lah", "ls -lAh"],
+     "hints": ["Three flags bundled together.", "long, all, human.", "ls -lah"],
+     "explain": "`ls -lah`: -l long listing, -a all (incl. dotfiles), -h human sizes."},
+    {"id": "files-cp", "domain": "1.0 System Management", "topic": "Files",
+     "prompt": "Copy the directory 'config' and everything inside it to 'config.bak'.",
+     "accept": ["cp -r config config.bak", "cp -R config config.bak",
+                "cp -a config config.bak"],
+     "hints": ["Plain cp refuses directories.", "Recursive flag.",
+               "cp -r config config.bak"],
+     "explain": "`cp -r` copies directories recursively; -a additionally preserves "
+                "permissions, times, and links (archive)."},
+    {"id": "files-mv", "domain": "1.0 System Management", "topic": "Files",
+     "prompt": "Rename the file report.txt to final.txt.",
+     "accept": ["mv report.txt final.txt"],
+     "hints": ["Moving and renaming are the same command.", "mv <old> <new>",
+               "mv report.txt final.txt"],
+     "explain": "`mv` both moves and renames - same source/dest syntax either way."},
+    {"id": "files-rm", "domain": "1.0 System Management", "topic": "Files",
+     "prompt": "Delete the directory 'builddir' and all of its contents, without "
+               "any confirmation prompts.",
+     "accept": ["rm -rf builddir", "rm -fr builddir", "rm -r -f builddir"],
+     "hints": ["Recursive plus force.", "-r descends, -f skips prompts.",
+               "rm -rf builddir"],
+     "explain": "`rm -rf` recursively force-deletes. THE classic dangerous command - "
+                "exactly why we practice it here, where nothing executes."},
+    {"id": "files-mkdir", "domain": "1.0 System Management", "topic": "Files",
+     "prompt": "Create the nested directory path /tmp/a/b/c in one command, creating "
+               "missing parents as needed.",
+     "accept": ["mkdir -p /tmp/a/b/c"],
+     "hints": ["Without a flag, mkdir fails if /tmp/a doesn't exist.",
+               "p for parents.", "mkdir -p /tmp/a/b/c"],
+     "explain": "`mkdir -p` creates every missing parent directory along the path."},
+    {"id": "files-touch", "domain": "1.0 System Management", "topic": "Files",
+     "prompt": "Create a new empty file called notes.txt.",
+     "accept": ["touch notes.txt"],
+     "hints": ["One word, then the filename.", "It also updates timestamps.",
+               "touch notes.txt"],
+     "explain": "`touch` creates an empty file, or updates the mtime if it exists."},
+    {"id": "files-ln", "domain": "1.0 System Management", "topic": "Files",
+     "prompt": "Create a symbolic link named 'webroot' pointing to /var/www/html.",
+     "accept": ["ln -s /var/www/html webroot"],
+     "hints": ["Without -s you get a HARD link.", "ln -s <target> <linkname>",
+               "ln -s /var/www/html webroot"],
+     "explain": "`ln -s target link` makes a symlink. Order trap: target FIRST."},
+    {"id": "files-stat", "domain": "1.0 System Management", "topic": "Files",
+     "prompt": "Show detailed metadata (size, permissions, timestamps, inode) for "
+               "report.txt.",
+     "accept": ["stat report.txt"],
+     "hints": ["More detail than ls -l.", "Four letters.", "stat report.txt"],
+     "explain": "`stat` shows access/modify/change times, inode, and octal mode."},
+
+    # ----------------------- TEXT TOOLS (1.5) ------------------------------ #
+    {"id": "text-cat", "domain": "1.0 System Management", "topic": "Text tools",
+     "prompt": "Print the contents of script.sh with line numbers.",
+     "accept": ["cat -n script.sh"],
+     "hints": ["cat with one flag.", "n for numbers.", "cat -n script.sh"],
+     "explain": "`cat -n` numbers every output line - handy for referencing code."},
+    {"id": "text-less", "domain": "1.0 System Management", "topic": "Text tools",
+     "prompt": "Open /var/log/syslog in a scrollable pager (searchable, q to quit).",
+     "accept": ["less /var/log/syslog"],
+     "hints": ["Don't cat a huge file - page it.", "less is more.",
+               "less /var/log/syslog"],
+     "explain": "`less` pages large files: / searches, G jumps to end, q quits."},
+    {"id": "text-head", "domain": "1.0 System Management", "topic": "Text tools",
+     "prompt": "Show only the first 20 lines of boot.log.",
+     "accept": ["head -n 20 boot.log", "head -20 boot.log", "head -n20 boot.log"],
+     "hints": ["The opposite of tail.", "-n sets the line count.",
+               "head -n 20 boot.log"],
+     "explain": "`head -n N` prints the first N lines (default 10)."},
+    {"id": "text-tailf", "domain": "1.0 System Management", "topic": "Text tools",
+     "prompt": "Watch /var/log/syslog live as new lines are appended.",
+     "accept": ["tail -f /var/log/syslog", "tail -F /var/log/syslog"],
+     "hints": ["tail, but following.", "f for follow.", "tail -f /var/log/syslog"],
+     "explain": "`tail -f` streams new lines; -F also survives log rotation."},
+    {"id": "text-cut", "domain": "1.0 System Management", "topic": "Text tools",
+     "prompt": "Print only the usernames (first field) from /etc/passwd, which is "
+               "colon-delimited.",
+     "accept": ["cut -d: -f1 /etc/passwd", "cut -f1 -d: /etc/passwd",
+                "cut -d : -f 1 /etc/passwd"],
+     "hints": ["-d sets the delimiter, -f picks the field.",
+               "Delimiter is ':' and you want field 1.",
+               "cut -d: -f1 /etc/passwd"],
+     "explain": "`cut -d: -f1` splits on ':' and keeps field 1 - the username."},
+    {"id": "text-wc", "domain": "1.0 System Management", "topic": "Text tools",
+     "prompt": "Count how many LINES are in access.log.",
+     "accept": ["wc -l access.log"],
+     "hints": ["word count, but for lines.", "l for lines.", "wc -l access.log"],
+     "explain": "`wc -l` counts lines; -w words, -c bytes."},
+    {"id": "text-tee", "domain": "1.0 System Management", "topic": "Text tools",
+     "prompt": "Run ./deploy.sh so its output shows on screen AND is saved to "
+               "deploy.log at the same time.",
+     "accept": ["./deploy.sh | tee deploy.log"], "mode": "contains",
+     "hints": ["A T-shaped pipe fitting: one stream, two destinations.",
+               "Pipe into tee.", "./deploy.sh | tee deploy.log"],
+     "explain": "`tee` duplicates stdin to the screen and a file; -a appends."},
+    {"id": "text-xargs", "domain": "1.0 System Management", "topic": "Text tools",
+     "prompt": "Delete every file listed (one per line) in oldfiles.txt, feeding the "
+               "names to rm.",
+     "accept": ["xargs rm < oldfiles.txt", "cat oldfiles.txt | xargs rm"],
+     "mode": "contains",
+     "hints": ["rm can't read a list from stdin by itself.",
+               "xargs turns stdin lines into arguments.",
+               "cat oldfiles.txt | xargs rm"],
+     "explain": "`xargs` converts stdin into command arguments - the glue between "
+                "pipes and commands that only take args."},
+    {"id": "text-sed", "domain": "1.0 System Management", "topic": "Text tools",
+     "prompt": "Print site.conf with every occurrence of 'http' replaced by 'https'.",
+     "accept": ["sed 's/http/https/g' site.conf",
+                'sed "s/http/https/g" site.conf',
+                "sed s/http/https/g site.conf"],
+     "hints": ["The stream editor's substitute command.",
+               "s/old/new/g - g means every occurrence on a line.",
+               "sed 's/http/https/g' site.conf"],
+     "explain": "`sed 's/old/new/g'` substitutes globally per line. Add -i to edit "
+                "the file in place."},
+    {"id": "text-awk", "domain": "1.0 System Management", "topic": "Text tools",
+     "prompt": "Print only the first column (the client IP) of access.log using awk.",
+     "accept": ["awk '{print $1}' access.log", 'awk "{print $1}" access.log'],
+     "hints": ["awk splits each line into $1, $2, ...",
+               "The action goes in braces: {print $1}",
+               "awk '{print $1}' access.log"],
+     "explain": "`awk '{print $1}'` prints field 1 of each line (whitespace-split). "
+                "-F: changes the delimiter."},
+
+    # ----------------------- PROCESSES (2.3 / 5.5) ------------------------- #
+    {"id": "proc-top", "domain": "5.0 Troubleshooting", "topic": "Performance",
+     "prompt": "Open the live, continuously-updating view of processes, CPU, and "
+               "memory usage.",
+     "accept": ["top", "htop"],
+     "hints": ["The classic real-time monitor.", "Three letters.", "top"],
+     "explain": "`top` updates live: P sorts by CPU, M by memory, k kills, q quits. "
+                "htop is the friendlier variant."},
+
+    # ----------------------- NETWORK TOOLS (1.4) --------------------------- #
+    {"id": "net-ping", "domain": "1.0 System Management", "topic": "Network",
+     "prompt": "Send exactly 4 ICMP echo requests to 8.8.8.8, then stop.",
+     "accept": ["ping -c 4 8.8.8.8", "ping -c4 8.8.8.8"],
+     "hints": ["Without a flag, ping runs forever on Linux.", "c for count.",
+               "ping -c 4 8.8.8.8"],
+     "explain": "`ping -c N` stops after N probes - script-friendly connectivity test."},
+    {"id": "net-traceroute", "domain": "1.0 System Management", "topic": "Network",
+     "prompt": "Show every router hop on the path to 8.8.8.8.",
+     "accept": ["traceroute 8.8.8.8", "tracepath 8.8.8.8"],
+     "hints": ["Trace the route.", "traceroute or tracepath.", "traceroute 8.8.8.8"],
+     "explain": "`traceroute` maps each hop with latency; tracepath needs no root. "
+                "mtr does this continuously."},
+    {"id": "net-nmap", "domain": "1.0 System Management", "topic": "Network",
+     "prompt": "Scan the host 10.0.0.5 for open ports.",
+     "accept": ["nmap 10.0.0.5"],
+     "hints": ["The network mapper.", "Just tool + host for a default scan.",
+               "nmap 10.0.0.5"],
+     "explain": "`nmap <host>` scans the most common ports. -p- scans all 65535."},
+    {"id": "net-nc", "domain": "1.0 System Management", "topic": "Network",
+     "prompt": "Test whether TCP port 22 on web01 is reachable, verbosely, without "
+               "sending data (scan-only).",
+     "accept": ["nc -vz web01 22", "nc -zv web01 22"],
+     "hints": ["netcat can probe a single port.", "-z scan only, -v verbose.",
+               "nc -vz web01 22"],
+     "explain": "`nc -vz host port` reports open/refused - the quickest single-port "
+                "reachability check."},
+    {"id": "net-curl", "domain": "1.0 System Management", "topic": "Network",
+     "prompt": "Fetch ONLY the HTTP response headers from https://example.com.",
+     "accept": ["curl -I https://example.com", "curl -I https://example.com/"],
+     "hints": ["You want the headers, not the body.", "Capital i.",
+               "curl -I https://example.com"],
+     "explain": "`curl -I` sends a HEAD request - status code and headers only."},
+    {"id": "net-nmcli", "domain": "1.0 System Management", "topic": "Network",
+     "prompt": "Using NetworkManager's CLI, show the status of all network devices.",
+     "accept": ["nmcli device status", "nmcli dev status", "nmcli device"],
+     "hints": ["NetworkManager CLI.", "Object 'device', action 'status'.",
+               "nmcli device status"],
+     "explain": "`nmcli device status` lists devices, types, states, and their "
+                "active connection profiles."},
+    {"id": "net-netplan", "domain": "1.0 System Management", "topic": "Network",
+     "prompt": "Test your new netplan configuration with an automatic rollback if "
+               "you don't confirm it (so a bad config can't lock you out).",
+     "accept": ["netplan try"],
+     "hints": ["Ubuntu's network config tool.",
+               "Not 'apply' - the safer one that reverts.", "netplan try"],
+     "explain": "`netplan try` applies the config and reverts unless confirmed - use "
+                "it for remote machines. `netplan apply` commits immediately."},
+    {"id": "net-ethtool", "domain": "1.0 System Management", "topic": "Network",
+     "prompt": "Show link status, speed, and duplex settings for the NIC eth0.",
+     "accept": ["ethtool eth0"],
+     "hints": ["The NIC settings tool.", "Tool + interface.", "ethtool eth0"],
+     "explain": "`ethtool eth0` shows negotiated speed/duplex and link detection - "
+                "first stop for link-negotiation issues."},
+
+    # --------------------- PARTITIONS & STORAGE (1.3) ---------------------- #
+    {"id": "stor-blkid", "domain": "1.0 System Management", "topic": "Partitions",
+     "prompt": "Show the UUID and filesystem type of every block device (for "
+               "building /etc/fstab entries).",
+     "accept": ["blkid"],
+     "hints": ["Block id.", "No flags needed.", "blkid"],
+     "explain": "`blkid` prints UUIDs and fs types - fstab's UUID= values come "
+                "from here (lsblk -f shows similar)."},
+    {"id": "stor-fdisk", "domain": "1.0 System Management", "topic": "Partitions",
+     "prompt": "List the partition tables of all disks (read-only, no changes).",
+     "accept": ["fdisk -l", "fdisk --list"],
+     "hints": ["The classic partitioner has a list flag.", "l for list.",
+               "fdisk -l"],
+     "explain": "`fdisk -l` prints partition tables without entering interactive "
+                "mode. gdisk handles GPT; parted does both."},
+    {"id": "stor-parted", "domain": "1.0 System Management", "topic": "Partitions",
+     "prompt": "Using parted, list all disks and their partition layouts.",
+     "accept": ["parted -l", "parted --list"],
+     "hints": ["Same idea as fdisk -l.", "parted with the list flag.", "parted -l"],
+     "explain": "`parted -l` shows every disk's label type (gpt/msdos) and "
+                "partitions - works for both MBR and GPT."},
+    {"id": "fs-umount", "domain": "1.0 System Management", "topic": "Mounting",
+     "prompt": "Detach the filesystem mounted at /mnt/data.",
+     "accept": ["umount /mnt/data"],
+     "hints": ["Watch the spelling - there's no 'n' after u.",
+               "umount <mountpoint>", "umount /mnt/data"],
+     "explain": "`umount` (not unmount!) detaches. 'target is busy' means a process "
+                "holds files open - find it with lsof /mnt/data."},
+
+    # ---------------------- SYSTEM SETTINGS (2.5) -------------------------- #
+    {"id": "sys-timedatectl", "domain": "2.0 Services and User Management",
+     "topic": "System settings",
+     "prompt": "Check the system clock, timezone, and whether NTP sync is active.",
+     "accept": ["timedatectl", "timedatectl status"],
+     "hints": ["A systemd ctl tool for time.", "No arguments needed.",
+               "timedatectl"],
+     "explain": "`timedatectl` shows local/UTC time, timezone, and NTP status. "
+                "set-timezone and set-ntp change them."},
+    {"id": "sys-hostnamectl", "domain": "2.0 Services and User Management",
+     "topic": "System settings",
+     "prompt": "Permanently set the system hostname to web01.",
+     "accept": ["hostnamectl set-hostname web01",
+                "hostnamectl hostname web01"],
+     "hints": ["The systemd hostname tool.", "Verb: set-hostname.",
+               "hostnamectl set-hostname web01"],
+     "explain": "`hostnamectl set-hostname` updates the static hostname persistently "
+                "(plain `hostname web01` lasts only until reboot)."},
+    {"id": "sys-sysctl", "domain": "2.0 Services and User Management",
+     "topic": "System settings",
+     "prompt": "Enable IPv4 packet forwarding RIGHT NOW by writing the kernel "
+               "parameter net.ipv4.ip_forward=1.",
+     "accept": ["sysctl -w net.ipv4.ip_forward=1",
+                "sysctl net.ipv4.ip_forward=1"],
+     "hints": ["Kernel runtime parameters live in sysctl.", "-w writes a value.",
+               "sysctl -w net.ipv4.ip_forward=1"],
+     "explain": "`sysctl -w key=value` sets a kernel parameter at runtime; persist "
+                "it in /etc/sysctl.conf or /etc/sysctl.d/."},
+
+    # ------------------------ USERS & GROUPS (2.2) ------------------------- #
+    {"id": "user-groupadd", "domain": "2.0 Services and User Management",
+     "topic": "Users",
+     "prompt": "Create a new group called 'developers'.",
+     "accept": ["groupadd developers"],
+     "hints": ["Like useradd, but for groups.", "groupadd <name>",
+               "groupadd developers"],
+     "explain": "`groupadd` creates the group; groupmod renames, groupdel removes."},
+    {"id": "user-id", "domain": "2.0 Services and User Management", "topic": "Users",
+     "prompt": "Show alice's UID, primary GID, and all her group memberships.",
+     "accept": ["id alice"],
+     "hints": ["Two letters.", "id <user>", "id alice"],
+     "explain": "`id` prints uid, gid, and groups - the quickest membership check."},
+    {"id": "user-getent", "domain": "2.0 Services and User Management",
+     "topic": "Users",
+     "prompt": "Look up alice's passwd entry through NSS (works for local AND "
+               "LDAP/SSSD users).",
+     "accept": ["getent passwd alice"],
+     "hints": ["grep /etc/passwd misses directory users.",
+               "get entries: getent <database> <key>.", "getent passwd alice"],
+     "explain": "`getent passwd alice` queries every NSS source - the right way to "
+                "check accounts on systems with central auth."},
+    {"id": "user-chage", "domain": "2.0 Services and User Management",
+     "topic": "Users",
+     "prompt": "Display alice's password aging information (last change, expiry, "
+               "warning days).",
+     "accept": ["chage -l alice"],
+     "hints": ["CHange AGE handles password aging.", "-l lists the settings.",
+               "chage -l alice"],
+     "explain": "`chage -l` shows aging policy; -M sets max days, -E sets account "
+                "expiry."},
+    {"id": "user-who", "domain": "2.0 Services and User Management", "topic": "Users",
+     "prompt": "Show who is currently logged in to the system.",
+     "accept": ["who", "w"],
+     "hints": ["Shortest command in the bank.", "who (or w for more detail).",
+               "who"],
+     "explain": "`who` lists sessions; `w` adds what each user is running and load."},
+
+    # --------------------- PERMISSIONS EXTRAS (3.1) ------------------------ #
+    {"id": "perm-umask", "domain": "3.0 Security", "topic": "Permissions",
+     "prompt": "Set this shell's file-creation mask so new files default to 644 and "
+               "new directories to 755.",
+     "accept": ["umask 022", "umask 0022"],
+     "hints": ["The mask SUBTRACTS from 666/777.", "666-644 = 022.", "umask 022"],
+     "explain": "`umask 022` removes group/other write: files 666-022=644, "
+                "dirs 777-022=755."},
+    {"id": "perm-su", "domain": "3.0 Security", "topic": "Privilege escalation",
+     "prompt": "Switch to the root account WITH root's full login environment "
+               "(profile, PATH, home).",
+     "accept": ["su -", "su - root", "su -l", "su -l root", "su --login"],
+     "hints": ["Plain su keeps YOUR environment.", "The dash makes it a login shell.",
+               "su -"],
+     "explain": "`su -` starts a login shell as root; without the dash you keep "
+                "your own env, which breaks PATH-dependent admin tools."},
+    {"id": "perm-sudoi", "domain": "3.0 Security", "topic": "Privilege escalation",
+     "prompt": "Using sudo, open an interactive root login shell.",
+     "accept": ["sudo -i", "sudo --login"],
+     "hints": ["sudo with one flag.", "i for interactive login.", "sudo -i"],
+     "explain": "`sudo -i` simulates a root login (root's env); `sudo -s` keeps "
+                "your environment instead."},
+
+    # -------------------------- SELINUX (3.1) ------------------------------ #
+    {"id": "sel-semanage", "domain": "3.0 Security", "topic": "SELinux",
+     "prompt": "Allow httpd to bind to the non-standard port 8081 by adding it to "
+               "the http_port_t SELinux port type.",
+     "accept": ["semanage port -a -t http_port_t -p tcp 8081"],
+     "hints": ["semanage manages persistent policy; object here is 'port'.",
+               "-a add, -t type, -p protocol.",
+               "semanage port -a -t http_port_t -p tcp 8081"],
+     "explain": "`semanage port -a -t http_port_t -p tcp 8081` - THE fix when a "
+                "service won't bind to a custom port under SELinux."},
+
+    # ------------------------- FIREWALLS (3.2) ----------------------------- #
+    {"id": "fw-iptables", "domain": "3.0 Security", "topic": "Firewalls",
+     "prompt": "List all iptables rules with packet counters and numeric "
+               "addresses/ports (no DNS lookups).",
+     "accept": ["iptables -L -n -v", "iptables -nvL", "iptables -vnL",
+                "iptables -L -v -n"],
+     "hints": ["Three flags: List, numeric, verbose.", "-L -n -v in any order.",
+               "iptables -L -n -v"],
+     "explain": "`iptables -L -n -v`: -n skips slow DNS, -v adds packet/byte "
+                "counters - showing which rules actually match traffic."},
+    {"id": "fw-nft", "domain": "3.0 Security", "topic": "Firewalls",
+     "prompt": "Display the complete current nftables ruleset.",
+     "accept": ["nft list ruleset"],
+     "hints": ["nftables CLI is nft.", "list + the whole ruleset.",
+               "nft list ruleset"],
+     "explain": "`nft list ruleset` dumps all tables/chains/rules - nftables is the "
+                "modern netfilter frontend that firewalld uses underneath."},
+
+    # ------------------------ BACKUP EXTRAS (1.6) -------------------------- #
+    {"id": "bk-dd", "domain": "1.0 System Management", "topic": "Backup",
+     "prompt": "Create a raw image of the whole disk /dev/sda into disk.img, using "
+               "4 MiB blocks, showing progress.",
+     "accept": ["dd if=/dev/sda of=disk.img bs=4M status=progress",
+                "dd if=/dev/sda of=disk.img status=progress bs=4M",
+                "dd bs=4M if=/dev/sda of=disk.img status=progress"],
+     "hints": ["if= input file, of= output file.", "bs=4M and status=progress.",
+               "dd if=/dev/sda of=disk.img bs=4M status=progress"],
+     "explain": "`dd if= of= bs=4M status=progress` images a device byte-for-byte. "
+                "Triple-check if/of - reversed, it destroys the source."},
+    {"id": "bk-bzip2", "domain": "1.0 System Management", "topic": "Compression",
+     "prompt": "Compress big.log with bzip2 (better ratio than gzip, slower).",
+     "accept": ["bzip2 big.log"],
+     "hints": ["Same usage pattern as gzip.", "Produces .bz2.", "bzip2 big.log"],
+     "explain": "`bzip2` -> .bz2; decompress with bunzip2/-d. tar's matching flag "
+                "is -j."},
+    {"id": "bk-xz", "domain": "1.0 System Management", "topic": "Compression",
+     "prompt": "Compress big.log with xz (best ratio of the three).",
+     "accept": ["xz big.log"],
+     "hints": ["Same pattern again.", "Produces .xz.", "xz big.log"],
+     "explain": "`xz` -> .xz; decompress with unxz/-d. tar's matching flag is -J. "
+                "Ratio: xz > bzip2 > gzip; speed is the reverse."},
+
+    # ------------------------ PACKAGES EXTRAS (2.4) ------------------------ #
+    {"id": "sw-dpkg", "domain": "2.0 Services and User Management",
+     "topic": "Software",
+     "prompt": "Install the local Debian package file ./agent.deb directly (no "
+               "repository).",
+     "accept": ["dpkg -i agent.deb", "dpkg -i ./agent.deb",
+                "apt install ./agent.deb"],
+     "hints": ["apt talks to repos; local .deb files use the lower-level tool.",
+               "dpkg with -i.", "dpkg -i agent.deb"],
+     "explain": "`dpkg -i file.deb` installs a local package (deps NOT auto-resolved; "
+                "`apt install ./file.deb` does resolve them)."},
+    {"id": "sw-rpmqa", "domain": "2.0 Services and User Management",
+     "topic": "Software",
+     "prompt": "On a RHEL-family system, list EVERY installed package.",
+     "accept": ["rpm -qa", "dnf list installed", "yum list installed"],
+     "hints": ["rpm query, all.", "rpm -qa", "rpm -qa"],
+     "explain": "`rpm -qa` queries all installed packages; pipe to grep to find one. "
+                "-qi shows info, -ql lists a package's files."},
+    {"id": "sw-pip", "domain": "2.0 Services and User Management",
+     "topic": "Software",
+     "prompt": "Install the Python package 'requests' with pip.",
+     "accept": ["pip install requests", "pip3 install requests"],
+     "hints": ["Python's package installer.", "pip install <pkg>",
+               "pip install requests"],
+     "explain": "`pip install` pulls from PyPI - language-level packages, separate "
+                "from apt/dnf system packages."},
 ]
 
 
@@ -1406,6 +1797,11 @@ TOOL_ALIASES = {
     "getfacl": "setfacl", "lsattr": "chattr", "chgrp": "chown",
     "ansible-playbook": "ansible",
     "mkfs.ext4": "mkfs", "mkfs.xfs": "mkfs",
+    "#!/bin/bash": "bash-basics", "$?": "bash-basics", "-eq": "bash-basics",
+    "./build.sh": "redirection", "./deploy.sh": "tee",
+    "tracepath": "traceroute", "htop": "top", "w": "who", "pip3": "pip",
+    "bunzip2": "bzip2", "unxz": "xz", "groupmod": "groupadd",
+    "groupdel": "groupadd", "hostname": "hostnamectl",
 }
 
 
@@ -2163,6 +2559,8 @@ OBJ_BY_TOPIC = {
     "Compose": "4.1", "Version control": "4.4",
     "Memory": "5.5", "Performance": "5.5", "Disk I/O": "5.5",
     "Network": "1.4", "DNS": "1.4", "Security": "5.4",
+    "Files": "2.1", "Partitions": "1.3", "System settings": "2.5",
+    "Firewalls": "3.2",
 }
 OBJ_OVERRIDES = {"shell-find-size": "2.1"}   # find lives under files/dirs
 
@@ -2539,6 +2937,52 @@ FLAG_INFO = {
     "lastb": {"-n": "row limit"}, "nohup": {},
     "systemd-analyze": {}, "lsblk": {"-f": "filesystems/UUIDs",
                                      "-p": "full device paths"},
+    "ls": {"-l": "long listing", "-a": "all incl. hidden",
+           "-h": "human sizes", "-R": "recursive", "-t": "sort by time"},
+    "cp": {"-r": "recursive", "-R": "recursive", "-a": "archive (preserve)",
+           "-p": "preserve attrs", "-i": "prompt before overwrite"},
+    "rm": {"-r": "recursive", "-f": "force, no prompts",
+           "-i": "prompt each file"},
+    "mkdir": {"-p": "create parents"},
+    "ln": {"-s": "symbolic link"},
+    "cat": {"-n": "number lines"},
+    "head": {"-n": "line count"},
+    "tail": {"-f": "follow live", "-F": "follow + survive rotation",
+             "-n": "line count"},
+    "cut": {"-d": "delimiter", "-f": "field number"},
+    "wc": {"-l": "lines", "-w": "words", "-c": "bytes"},
+    "tee": {"-a": "append"},
+    "sed": {"-i": "edit in place", "-n": "suppress auto-print"},
+    "awk": {"-F": "field delimiter"},
+    "ping": {"-c": "probe count", "-i": "interval"},
+    "traceroute": {}, "nmap": {"-p": "port range"},
+    "nc": {"-v": "verbose", "-z": "scan only (no data)",
+           "-l": "listen mode"},
+    "curl": {"-I": "headers only (HEAD)", "-o": "output file",
+             "-L": "follow redirects", "-s": "silent"},
+    "nmcli": {}, "netplan": {}, "ethtool": {},
+    "blkid": {}, "fdisk": {"-l": "list partition tables"},
+    "parted": {"-l": "list all disks"},
+    "sysctl": {"-w": "write a value", "-a": "show all"},
+    "timedatectl": {}, "hostnamectl": {},
+    "groupadd": {}, "getent": {}, "who": {}, "top": {},
+    "umask": {}, "su": {}, "sudo": {"-i": "root login shell",
+                                    "-s": "shell, keep env",
+                                    "-u": "run as user"},
+    "semanage": {"-a": "add", "-t": "SELinux type", "-p": "protocol",
+                 "-l": "list"},
+    "iptables": {"-L": "list rules", "-n": "numeric (no DNS)",
+                 "-v": "verbose counters", "-A": "append rule",
+                 "-D": "delete rule"},
+    "nft": {},
+    "dd": {}, "bzip2": {"-d": "decompress", "-k": "keep original"},
+    "xz": {"-d": "decompress", "-k": "keep original"},
+    "dpkg": {"-i": "install .deb", "-l": "list installed",
+             "-L": "files of a package", "-r": "remove"},
+    "rpm": {"-q": "query", "-a": "all packages", "-i": "info/install",
+            "-l": "list files"},
+    "pip": {}, "stat": {}, "touch": {}, "mv": {}, "id": {},
+    "bash-basics": {}, "redirection": {}, "less": {}, "xargs": {},
 }
 
 
@@ -2728,6 +3172,10 @@ def c(t): return C.wrap(C.CYAN, t)
 def d(t): return C.wrap(C.DIM, t)
 def b(t): return C.wrap(C.BOLD, t)
 def m(t): return C.wrap(C.MAG, t)
+
+
+def ok(t): return g("\u25cf " + t)     # green dot + green text
+def bad(t): return r("\u25cf " + t)    # red dot + red text
 
 
 BANNER = r"""
@@ -3223,30 +3671,110 @@ def pick_weak_family(prog):
     return None
 
 
+TOOL_CATS = [
+    ("System Management", [
+        ("Files & navigation", ["ls", "cp", "mv", "rm", "mkdir", "touch",
+                                "ln", "stat"]),
+        ("Text tools", ["cat", "less", "head", "tail", "grep", "cut", "sort",
+                        "wc", "tee", "xargs", "sed", "awk", "find"]),
+        ("Shell & redirection", ["redirection"]),
+        ("Storage & mounting", ["lsblk", "blkid", "fdisk", "parted", "mkfs",
+                                "mount", "df", "du", "fsck", "fsresize"]),
+        ("LVM", ["lvm"]),
+        ("Devices & kernel", ["modprobe", "dmesg", "dracut"]),
+        ("Networking tools", ["ip", "ss", "ping", "dig", "mtr", "traceroute",
+                              "tcpdump", "nmap", "nc", "curl", "nmcli",
+                              "netplan", "ethtool"]),
+        ("Backup & compression", ["tar", "gzip", "bzip2", "xz", "rsync", "dd"]),
+        ("Virtualization", ["virsh"]),
+    ]),
+    ("Services & User Management", [
+        ("systemd & services", ["systemctl", "systemd-analyze"]),
+        ("Logs (journald)", ["journalctl"]),
+        ("System settings", ["timedatectl", "hostnamectl", "sysctl"]),
+        ("Processes & jobs", ["ps", "top", "kill", "renice", "nohup", "lsof",
+                              "crontab"]),
+        ("Users & groups", ["useradd", "groupadd", "id", "getent", "who"]),
+        ("Packages", ["apt", "dnf", "dpkg", "rpm", "pip"]),
+        ("Containers", ["podman"]),
+    ]),
+    ("Security", [
+        ("Permissions & ownership", ["chmod", "chown", "umask", "su", "sudo"]),
+        ("ACLs & attributes", ["setfacl", "chattr"]),
+        ("SELinux", ["selinux", "semanage"]),
+        ("Firewalls", ["firewall-cmd", "ufw", "iptables", "nft"]),
+        ("SSH & sudoers", ["ssh-keygen", "visudo"]),
+        ("Login auditing", ["lastb"]),
+    ]),
+    ("Automation & Scripting", [
+        ("Shell scripting basics", ["bash-basics"]),
+        ("Git", ["git"]),
+        ("Ansible / K8s / Compose", ["ansible", "kubectl", "compose"]),
+    ]),
+    ("Troubleshooting", [
+        ("Performance & resources", ["free", "vmstat", "iostat", "uptime"]),
+    ]),
+]
+
+
+def _pick_numbered(title, items, render):
+    """Generic numbered menu with 0 = back. Returns item or None (back/quit)."""
+    print(f"\n{b(title)}   {d('(0 = back)')}")
+    for i, it in enumerate(items, 1):
+        print(f"  {c(str(i))}  {render(it)}")
+    print(f"  {c('0')}  Back")
+    while True:
+        ch = prompt_line(f"\n{g('> ')}").strip().lower()
+        if ch in (":quit", ":q"):
+            return ":quit"
+        if ch in ("0", "b", "back", ":menu", ":m"):
+            return None
+        if ch.isdigit() and 1 <= int(ch) <= len(items):
+            return items[int(ch) - 1]
+        print(r("  Pick a number from the list (0 to go back)."))
+
+
 def learn_tool(prog):
-    """Learn Mode: intro -> 2 copy reps -> guided attempts on that tool."""
+    """Learn Mode: category -> topic -> tool -> intro + copy reps + guided."""
     touched = set(prog.get("fam", {}))
-    fams = sorted({drill_key(s) for s in SCENARIOS})
-    fresh = [f for f in fams if f not in touched] or fams
-    print(f"\n{b('Pick a tool to learn:')}")
-    for i, f in enumerate(fresh[:10], 1):
-        n = len(fam_scenarios(f))
-        print(f"  {c(str(i))}  {f}  {d('(' + str(n) + ' scenarios)')}")
-    choice = prompt_line(f"\n{g('tool> ')}").strip().lower()
-    if choice in (":quit", ":q"):
-        return "quit"
-    if choice.isdigit() and 1 <= int(choice) <= len(fresh[:10]):
-        fam = fresh[int(choice) - 1]
-    elif choice in fams:
-        fam = choice
-    else:
-        print(r("  Pick a number from the list."))
-        return "menu"
+    while True:
+        cat = _pick_numbered("Pick a category:", TOOL_CATS, lambda x: x[0])
+        if cat == ":quit":
+            return "quit"
+        if cat is None:
+            return "menu"
+        catname, subs = cat
+        while True:
+            sub = _pick_numbered(
+                f"{catname} - pick a topic:", subs,
+                lambda x: f"{x[0]}  {d('(' + str(len(x[1])) + ' tools)')}")
+            if sub == ":quit":
+                return "quit"
+            if sub is None:
+                break  # back to categories
+            subname, fams = sub
+            fams = [f for f in fams if fam_scenarios(f)]
+            while True:
+                def _tline(f):
+                    n = len(fam_scenarios(f))
+                    mark = d("  · started") if f in touched else ""
+                    return f"{f}  {d('(' + str(n) + ' scenarios)')}{mark}"
+                fam = _pick_numbered(f"{subname} - pick a tool:", fams, _tline)
+                if fam == ":quit":
+                    return "quit"
+                if fam is None:
+                    break  # back to topics
+                res = _run_learn_flow(fam, prog)
+                if res in ("quit", "menu"):
+                    return res
+                touched = set(prog.get("fam", {}))
+
+
+def _run_learn_flow(fam, prog):
     pool = fam_scenarios(fam)
     sc0, _, _ = instantiate(pool[0])
     print(f"\n{b('=== Learning: ' + fam + ' ===')}")
     render_teach(sc0)
-    # copy reps: 2 distinct canonical commands
     cmds = [sc0["accept"][0]]
     for dr in DRILLS.get(fam, [])[:1]:
         cmds.append(dr["a"][0])
@@ -3261,10 +3789,10 @@ def learn_tool(prog):
                 break
             if check_answer(ans, {"accept": [cmdtext], "mode": "smart"}):
                 tm["learn"] += 1
-                print(f"  {g('● Good copy.')}")
+                print(f"  {ok('Good copy.')}")
                 break
             diff = flag_diff(ans, [cmdtext], fam)
-            print(f"  {r('● Almost - check it against the line above.')}")
+            print(f"  {bad('Almost - check it against the line above.')}")
             if diff:
                 render_diff(ans, diff)
     print(f"\n  {b('Now without the answer in front of you:')}")

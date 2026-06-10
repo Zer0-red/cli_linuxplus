@@ -37,7 +37,7 @@ import sys
 import textwrap
 
 # Bump on EVERY delivered change: major.minor.patch
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 
 # --------------------------------------------------------------------------- #
 #  Scenario bank  (all original, written from the published XK0-006 objectives)
@@ -1031,12 +1031,6 @@ SCENARIOS = [
     },
 
     # ------------------ FILES & NAVIGATION (2.1) --------------------------- #
-    {"id": "files-ls", "domain": "1.0 System Management", "topic": "Files",
-     "prompt": "List everything in the current directory: long format, including "
-               "hidden files, with human-readable sizes.",
-     "accept": ["ls -lah", "ls -lAh"],
-     "hints": ["Three flags bundled together.", "long, all, human.", "ls -lah"],
-     "explain": "`ls -lah`: -l long listing, -a all (incl. dotfiles), -h human sizes."},
     {"id": "files-cp", "domain": "1.0 System Management", "topic": "Files",
      "prompt": "Copy the directory 'config' and everything inside it to 'config.bak'.",
      "accept": ["cp -r config config.bak", "cp -R config config.bak",
@@ -1045,12 +1039,6 @@ SCENARIOS = [
                "cp -r config config.bak"],
      "explain": "`cp -r` copies directories recursively; -a additionally preserves "
                 "permissions, times, and links (archive)."},
-    {"id": "files-mv", "domain": "1.0 System Management", "topic": "Files",
-     "prompt": "Rename the file report.txt to final.txt.",
-     "accept": ["mv report.txt final.txt"],
-     "hints": ["Moving and renaming are the same command.", "mv <old> <new>",
-               "mv report.txt final.txt"],
-     "explain": "`mv` both moves and renames - same source/dest syntax either way."},
     {"id": "files-rm", "domain": "1.0 System Management", "topic": "Files",
      "prompt": "Delete the directory 'builddir' and all of its contents, without "
                "any confirmation prompts.",
@@ -1066,37 +1054,14 @@ SCENARIOS = [
      "hints": ["Without a flag, mkdir fails if /tmp/a doesn't exist.",
                "p for parents.", "mkdir -p /tmp/a/b/c"],
      "explain": "`mkdir -p` creates every missing parent directory along the path."},
-    {"id": "files-touch", "domain": "1.0 System Management", "topic": "Files",
-     "prompt": "Create a new empty file called notes.txt.",
-     "accept": ["touch notes.txt"],
-     "hints": ["One word, then the filename.", "It also updates timestamps.",
-               "touch notes.txt"],
-     "explain": "`touch` creates an empty file, or updates the mtime if it exists."},
     {"id": "files-ln", "domain": "1.0 System Management", "topic": "Files",
      "prompt": "Create a symbolic link named 'webroot' pointing to /var/www/html.",
      "accept": ["ln -s /var/www/html webroot"],
      "hints": ["Without -s you get a HARD link.", "ln -s <target> <linkname>",
                "ln -s /var/www/html webroot"],
      "explain": "`ln -s target link` makes a symlink. Order trap: target FIRST."},
-    {"id": "files-stat", "domain": "1.0 System Management", "topic": "Files",
-     "prompt": "Show detailed metadata (size, permissions, timestamps, inode) for "
-               "report.txt.",
-     "accept": ["stat report.txt"],
-     "hints": ["More detail than ls -l.", "Four letters.", "stat report.txt"],
-     "explain": "`stat` shows access/modify/change times, inode, and octal mode."},
 
     # ----------------------- TEXT TOOLS (1.5) ------------------------------ #
-    {"id": "text-cat", "domain": "1.0 System Management", "topic": "Text tools",
-     "prompt": "Print the contents of script.sh with line numbers.",
-     "accept": ["cat -n script.sh"],
-     "hints": ["cat with one flag.", "n for numbers.", "cat -n script.sh"],
-     "explain": "`cat -n` numbers every output line - handy for referencing code."},
-    {"id": "text-less", "domain": "1.0 System Management", "topic": "Text tools",
-     "prompt": "Open /var/log/syslog in a scrollable pager (searchable, q to quit).",
-     "accept": ["less /var/log/syslog"],
-     "hints": ["Don't cat a huge file - page it.", "less is more.",
-               "less /var/log/syslog"],
-     "explain": "`less` pages large files: / searches, G jumps to end, q quits."},
     {"id": "text-head", "domain": "1.0 System Management", "topic": "Text tools",
      "prompt": "Show only the first 20 lines of boot.log.",
      "accept": ["head -n 20 boot.log", "head -20 boot.log", "head -n20 boot.log"],
@@ -1159,13 +1124,6 @@ SCENARIOS = [
                 "-F: changes the delimiter."},
 
     # ----------------------- PROCESSES (2.3 / 5.5) ------------------------- #
-    {"id": "proc-top", "domain": "5.0 Troubleshooting", "topic": "Performance",
-     "prompt": "Open the live, continuously-updating view of processes, CPU, and "
-               "memory usage.",
-     "accept": ["top", "htop"],
-     "hints": ["The classic real-time monitor.", "Three letters.", "top"],
-     "explain": "`top` updates live: P sorts by CPU, M by memory, k kills, q quits. "
-                "htop is the friendlier variant."},
 
     # ----------------------- NETWORK TOOLS (1.4) --------------------------- #
     {"id": "net-ping", "domain": "1.0 System Management", "topic": "Network",
@@ -1288,11 +1246,6 @@ SCENARIOS = [
      "hints": ["Like useradd, but for groups.", "groupadd <name>",
                "groupadd developers"],
      "explain": "`groupadd` creates the group; groupmod renames, groupdel removes."},
-    {"id": "user-id", "domain": "2.0 Services and User Management", "topic": "Users",
-     "prompt": "Show alice's UID, primary GID, and all her group memberships.",
-     "accept": ["id alice"],
-     "hints": ["Two letters.", "id <user>", "id alice"],
-     "explain": "`id` prints uid, gid, and groups - the quickest membership check."},
     {"id": "user-getent", "domain": "2.0 Services and User Management",
      "topic": "Users",
      "prompt": "Look up alice's passwd entry through NSS (works for local AND "
@@ -1311,12 +1264,6 @@ SCENARIOS = [
                "chage -l alice"],
      "explain": "`chage -l` shows aging policy; -M sets max days, -E sets account "
                 "expiry."},
-    {"id": "user-who", "domain": "2.0 Services and User Management", "topic": "Users",
-     "prompt": "Show who is currently logged in to the system.",
-     "accept": ["who", "w"],
-     "hints": ["Shortest command in the bank.", "who (or w for more detail).",
-               "who"],
-     "explain": "`who` lists sessions; `w` adds what each user is running and load."},
 
     # --------------------- PERMISSIONS EXTRAS (3.1) ------------------------ #
     {"id": "perm-umask", "domain": "3.0 Security", "topic": "Permissions",
@@ -3332,8 +3279,9 @@ def render_teach(sc):
 def run_drill(dr, prog, tool, rep):
     """One rep exercise. Returns 'ok' (back to rep prompt) or quit/menu/level."""
     pseudo = {"accept": dr["a"], "mode": dr.get("m", "smart")}
-    print(f"\n  {m('rep ' + str(rep))} {d('on')} {c(tool)}")
-    print(f"  {b('Task:')} {dr['q']}")
+    print(f"\n  {d('─' * 56)}")
+    print(f"  {m('rep ' + str(rep))} {d('on')} {c(tool)}")
+    print(f"  {c('>>')} {b('Task:')} {dr['q']}")
     while True:
         ans = prompt_line(f"  {g('$ ')}").strip()
         if not ans:
@@ -3374,6 +3322,7 @@ def run_drill(dr, prog, tool, rep):
             render_diff(ans, diff)
             _weak_note(prog, tool, diff["missing"])
         print(f"  {d('Try again, or :hint / :answer')}")
+        print(f"\n  {c('>>')} {b('Task:')} {dr['q']}")
 
 
 def drill_loop(sc, prog):
@@ -3386,7 +3335,8 @@ def drill_loop(sc, prog):
     idx = 0
     rep = 0
     extra = "" if bank else d(" (re-typing from memory - repetition still counts!)")
-    print(f"\n  {b('Rep it in:')} keep drilling {c(tool)} until it sticks.{extra}")
+    print(f"\n{d('─' * 70)}")
+    print(f"  {b('Rep it in:')} keep drilling {c(tool)} until it sticks.{extra}")
     print(d("  [Enter] another rep    [n] next scenario    "
             "(:menu / :level / :quit also work)"))
     while True:
@@ -3485,12 +3435,15 @@ def ask_scenario(sc, prog, difficulty="practice"):
     print(f"{d(sc['domain'])}  {d('|')}  {c(sc['topic'])}  "
           f"{d('|  obj ' + sc.get('obj', '?'))}  "
           f"{d('. ' + DIFF_LABELS[difficulty])}")
-    print(f"\n{b('Scenario:')} {sc['prompt']}\n")
+    print(f"\n{c('>>')} {b('Scenario:')} {sc['prompt']}\n")
     if difficulty in ("tutorial", "learn"):
         render_teach(sc)
         print()
     if difficulty == "learn":
         print(f"  {b('Copy it to build the pattern:')}  {c(sc['accept'][0])}\n")
+    def _remind():
+        print(f"\n  {c('>>')} {b('Task:')} {sc['prompt']}")
+
     hint_idx = 0
     first_attempt = True
     solved_clean = True
@@ -3594,9 +3547,11 @@ def ask_scenario(sc, prog, difficulty="practice"):
                 break
         if trap_msg:
             print(f"  {r('● Not quite.')} {y(trap_msg)}")
+            _remind()
             continue
         if difficulty == "exam":
             print(f"  {r('● Not quite.')} {d('Try again, or :answer / :skip')}")
+            _remind()
             continue
         diff = flag_diff(cmd, sc["accept"], fam)
         print(f"  {r('● Not quite.')}")
@@ -3608,8 +3563,10 @@ def ask_scenario(sc, prog, difficulty="practice"):
             if diff["missing"] and not did_micro:
                 did_micro = True
                 micro_flag_check(fam, diff["missing"])
+                _remind()
                 continue
         print(f"  {d('Try again, or :hint / :answer / :skip')}")
+        _remind()
 
 
 # --------------------------------------------------------------------------- #
@@ -3673,10 +3630,9 @@ def pick_weak_family(prog):
 
 TOOL_CATS = [
     ("System Management", [
-        ("Files & navigation", ["ls", "cp", "mv", "rm", "mkdir", "touch",
-                                "ln", "stat"]),
-        ("Text tools", ["cat", "less", "head", "tail", "grep", "cut", "sort",
-                        "wc", "tee", "xargs", "sed", "awk", "find"]),
+        ("Files & navigation", ["cp", "rm", "mkdir", "ln"]),
+        ("Text tools", ["head", "tail", "grep", "cut", "sort", "wc",
+                        "tee", "xargs", "sed", "awk", "find"]),
         ("Shell & redirection", ["redirection"]),
         ("Storage & mounting", ["lsblk", "blkid", "fdisk", "parted", "mkfs",
                                 "mount", "df", "du", "fsck", "fsresize"]),
@@ -3692,9 +3648,9 @@ TOOL_CATS = [
         ("systemd & services", ["systemctl", "systemd-analyze"]),
         ("Logs (journald)", ["journalctl"]),
         ("System settings", ["timedatectl", "hostnamectl", "sysctl"]),
-        ("Processes & jobs", ["ps", "top", "kill", "renice", "nohup", "lsof",
+        ("Processes & jobs", ["ps", "kill", "renice", "nohup", "lsof",
                               "crontab"]),
-        ("Users & groups", ["useradd", "groupadd", "id", "getent", "who"]),
+        ("Users & groups", ["useradd", "groupadd", "getent"]),
         ("Packages", ["apt", "dnf", "dpkg", "rpm", "pip"]),
         ("Containers", ["podman"]),
     ]),
@@ -3738,7 +3694,7 @@ def learn_tool(prog):
     """Learn Mode: category -> topic -> tool -> intro + copy reps + guided."""
     touched = set(prog.get("fam", {}))
     while True:
-        cat = _pick_numbered("Pick a category:", TOOL_CATS, lambda x: x[0])
+        cat = _pick_numbered("GYM - pick a category:", TOOL_CATS, lambda x: x[0])
         if cat == ":quit":
             return "quit"
         if cat is None:
@@ -3870,26 +3826,21 @@ def study_loop(pool, difficulty, prog, session_len=8, label=""):
 
 
 def main_menu(prog):
-    weak = pick_weak_family(prog)
-    wf_count = sum(len(v) for v in prog.get("weakflags", {}).values())
     print(f"\n{b('What do you want to do?')}")
-    print(f"  {c('1')}  Learn a new tool      {d('(intro + copy practice)')}")
-    rec = f"  {m('<- recommended')}" if weak else ""
-    wdesc = f"({weak})" if weak else "(nothing flagged yet)"
-    print(f"  {c('2')}  Continue weak tool    {d(wdesc)}{rec}")
-    print(f"  {c('3')}  Drill weak flags      "
-          f"{d('(' + str(wf_count) + ' owed)')}")
-    print(f"  {c('4')}  Scenario practice     {d('(pick a domain, hints on demand)')}")
-    print(f"  {c('5')}  Mixed exam mode       {d('(everything, no scaffolding)')}")
-    print(f"  {c('6')}  Progress")
+    print(f"  {c('1')}  GYM mode             "
+          f"{d('(learn & drill tools by category)')}")
+    print(f"  {c('2')}  Scenario practice    "
+          f"{d('(pick a domain, hints on demand)')}")
+    print(f"  {c('3')}  Mixed exam mode      {d('(everything, no scaffolding)')}")
+    print(f"  {c('4')}  Progress")
     print(f"  {c('q')}  Save and quit")
     while True:
         ch = prompt_line(f"\n{g('menu> ')}").strip().lower()
         if ch in ("q", ":quit", ":q"):
             return "quit"
-        if ch in ("1", "2", "3", "4", "5", "6"):
+        if ch in ("1", "2", "3", "4"):
             return ch
-        print(r("  Pick 1-6 or q."))
+        print(r("  Pick 1-4 or q."))
 
 
 def run():
@@ -3985,19 +3936,6 @@ def run():
         if choice == "1":
             res = learn_tool(prog)
         elif choice == "2":
-            fam = pick_weak_family(prog)
-            if fam is None:
-                print(d("\n  Nothing flagged as weak yet - do a round of "
-                        "scenario practice first (option 4)."))
-                continue
-            wf = sorted(prog.get("weakflags", {}).get(fam, {}))
-            extra = f" - weak flags: {', '.join(wf)}" if wf else ""
-            print(d(f"\n  Focusing on {fam}{extra}"))
-            res = study_loop(fam_scenarios(fam), "tutorial", prog,
-                             session_len, f"weak tool: {fam}")
-        elif choice == "3":
-            res = weak_flag_drill(prog)
-        elif choice == "4":
             difficulty = cli_level or "practice"
             kind, value = choose_domain()
             if kind is None:
@@ -4005,7 +3943,7 @@ def run():
             else:
                 res = study_loop(filter_scenarios(kind, value, prog),
                                  difficulty, prog, session_len)
-        elif choice == "5":
+        elif choice == "3":
             res = study_loop(SCENARIOS, "exam", prog, session_len, "mixed exam")
         else:
             show_stats(prog)

@@ -35,9 +35,10 @@ import random
 import re
 import sys
 import textwrap
+import datetime
 
 # Bump on EVERY delivered change: major.minor.patch
-__version__ = "2.5.2"
+__version__ = "2.9.0"
 
 # --------------------------------------------------------------------------- #
 #  Scenario bank  (all original, written from the published XK0-006 objectives)
@@ -3474,6 +3475,39 @@ def clear_screen():
         print("\033[2J\033[H", end="")
 
 
+def _today():
+    return datetime.date.today().isoformat()
+
+
+REVIEW_INTERVALS = {0: 1, 1: 1, 2: 2, 3: 4, 4: 7, 5: 14}   # box -> days
+
+
+def _schedule_review(prog, sid):
+    """Set the next review date for a scenario based on its Leitner box."""
+    box = prog.get("boxes", {}).get(sid, 0)
+    days = REVIEW_INTERVALS.get(box, 7)
+    due = datetime.date.fromisoformat(_today()) + datetime.timedelta(days=days)
+    prog.setdefault("due", {})[sid] = due.isoformat()
+
+
+def due_scenarios(prog):
+    today = _today()
+    due = prog.get("due", {})
+    return [s for s in SCENARIOS if due.get(s["id"], "9999") <= today]
+
+
+def _touch_day(prog):
+    """Maintain the daily study streak."""
+    today = _today()
+    st = prog.setdefault("streak", {"last_day": "", "days": 0})
+    if st["last_day"] == today:
+        return
+    yesterday = (datetime.date.fromisoformat(today)
+                 - datetime.timedelta(days=1)).isoformat()
+    st["days"] = st["days"] + 1 if st["last_day"] == yesterday else 1
+    st["last_day"] = today
+
+
 BANNER = r"""
 ███████╗███████╗██████╗  ██████╗ ██████╗ ███████╗██████╗
 ╚══███╔╝██╔════╝██╔══██╗██╔═████╗██╔══██╗██╔════╝██╔══██╗
@@ -3527,6 +3561,7 @@ HELP_TEXT = f"""
 {b('Commands you can type instead of an answer:')}
   {c(':hint')}     reveal the next hint (small first, bigger later)
   {c(':answer')}   give up and show the correct command
+  {c(':why')}      re-show the tool briefing and flag table
   {c(':skip')}     skip to a new scenario
   {c(':stats')}    show your progress
   {c(':menu')}     change which domain you're drilling
@@ -3838,12 +3873,23 @@ def ask_scenario(sc, prog, difficulty="practice"):
             else:
                 print(d("  No more hints - type :answer to reveal it."))
             continue
+        if cmd in (":why", ":w"):
+            if difficulty == "exam":
+                print(d("  :why is off in Exam mode - prove it from memory."))
+                continue
+            solved_clean = False
+            print()
+            render_teach(sc, ask=False)
+            _remind()
+            continue
         if cmd in (":answer", ":a", ":reveal"):
             solved_clean = False
             print(f"  {y('Answer:')} {b(sc['accept'][0])}")
             print()
             print(f"  {d(sc['explain'])}")
             prog["seen"] = prog.get("seen", 0) + 1
+            _touch_day(prog)
+            _schedule_review(prog, sc["id"])
             if difficulty != "learn":
                 tm[bucket][1] += 1
             return "next"
@@ -3895,6 +3941,8 @@ def ask_scenario(sc, prog, difficulty="practice"):
                 print(f"  {y('Note:')} {soft_hit['msg']}")
             print()
             print(f"  {d(sc['explain'])}")
+            _touch_day(prog)
+            _schedule_review(prog, sc["id"])
             return "done"
 
         # --- wrong ---
@@ -4043,12 +4091,16 @@ TOOL_CATS = [
 ]
 
 
-def _pick_numbered(title, items, render):
-    """Generic numbered menu with 0 = back. Returns item or None (back/quit)."""
+def _pick_numbered(title, items, render, extras=None):
+    """Generic numbered menu with 0 = back. Returns item, ("extra", key),
+    None (back), or ":quit" / ":mainmenu"."""
     print(f"\n{b(title)}   {d('(0 = back)')}")
     for i, it in enumerate(items, 1):
         print(f"  {c(str(i))}  {render(it)}")
     print(f"  {c('0')}  Back")
+    if extras:
+        for k, lbl in extras.items():
+            print(f"  {c(k)}  {lbl}")
     while True:
         ch = prompt_line(f"\n{g('> ')}").strip().lower()
         if ch in (":quit", ":q"):
@@ -4057,6 +4109,8 @@ def _pick_numbered(title, items, render):
             return ":mainmenu"
         if ch in ("0", "b", "back"):
             return None
+        if extras and ch in extras:
+            return ("extra", ch)
         if ch.isdigit() and 1 <= int(ch) <= len(items):
             return items[int(ch) - 1]
         print(r("  Pick a number from the list (0 to go back)."))
@@ -4066,11 +4120,22 @@ def learn_tool(prog):
     """Learn Mode: category -> topic -> tool -> intro + copy reps + guided."""
     touched = set(prog.get("fam", {}))
     while True:
-        cat = _pick_numbered("GYM - pick a category:", TOOL_CATS, lambda x: x[0])
+        extras = None
+        last = prog.get("last_tool")
+        if last and fam_scenarios(last):
+            extras = {"c": f"Continue last tool: {c(last)}"}
+        cat = _pick_numbered("GYM - pick a category:", TOOL_CATS,
+                             lambda x: x[0], extras=extras)
         if cat == ":quit":
             return "quit"
         if cat is None or cat == ":mainmenu":
             return "menu"
+        if isinstance(cat, tuple) and cat[0] == "extra":
+            res = _run_learn_flow(last, prog)
+            if res in ("quit", "menu"):
+                return res
+            touched = set(prog.get("fam", {}))
+            continue
         catname, subs = cat
         while True:
             sub = _pick_numbered(
@@ -4103,36 +4168,67 @@ def learn_tool(prog):
 
 
 def _learn_examples(fam):
-    """Goal/command/why triples: the tool's scenarios + its drill variations."""
+    """(goal, cmd, why, sim, sid) tuples: scenarios + drill variations."""
     items = []
     for s in fam_scenarios(fam)[:2]:
         inst, _, _ = instantiate(s)
-        items.append((inst["prompt"], inst["accept"][0], inst.get("explain")))
+        sim = SIM_OUTPUT.get(s["id"])
+        if sim and inst.get("_vals"):
+            sim = _subst(sim, inst["_vals"])
+        items.append((inst["prompt"], inst["accept"][0],
+                      inst.get("explain"), sim, s["id"]))
     for dr in DRILLS.get(fam, [])[:3]:
-        items.append((dr["q"], dr["a"][0], dr.get("e")))
-    # drop duplicate commands (a drill can mirror a scenario)
+        items.append((dr["q"], dr["a"][0], dr.get("e"), None, None))
     seen, out = set(), []
-    for goal, cmd, why in items:
+    for goal, cmd, why, sim, sid in items:
         key = normalize(cmd)
         if key in seen:
             continue
         seen.add(key)
-        out.append((goal, cmd, why))
+        out.append((goal, cmd, why, sim, sid))
     return out[:4]
 
 
-def _run_learn_flow(fam, prog):
-    pool = fam_scenarios(fam)
-    sc0, _, _ = instantiate(pool[0])
-    print(f"\n{b('=== Learning: ' + fam + ' ===')}")
-    render_teach(sc0, ask=False)
-    tm = _toolmode(prog, fam)
-    examples = _learn_examples(fam)
-    total = len(examples)
-    for i, (goal, cmd, why) in enumerate(examples, 1):
-        print(f"\n  {d('─' * 56)}")
-        print(f"  {m('Example ' + str(i) + ' of ' + str(total))}")
-        print(f"  {c('>>')} {b('Goal:')} {goal}")
+def _lesson_flags(fam, examples):
+    """Unique (flag, meaning) pairs taught by the examples, max 5."""
+    out, seen = [], set()
+    for _, cmd, _, _, _ in examples:
+        for tok in normalize(cmd).split()[1:]:
+            if not (tok.startswith("-") or tok.startswith("+")):
+                continue
+            mn = _flag_meaning(fam, tok)
+            base = tok if tok in FLAG_INFO.get(fam, {}) else tok.split("=")[0]
+            if len(base) > 2 and base.startswith("-") and not base.startswith("--") \
+                    and base not in FLAG_INFO.get(fam, {}):
+                base = base[:2]
+            if mn and base not in seen:
+                seen.add(base)
+                out.append((base, mn))
+    return out[:5]
+
+
+def _hdr(fam, step, steps, title, extra=""):
+    raw = f"── {fam}  ·  step {step}/{steps}: {title}"
+    if extra:
+        raw += f"  ·  {extra}"
+    raw += " " + "─" * max(2, 69 - len(raw))
+    print(m(raw))
+
+
+def _lesson_pause(msg="[Enter] continue    [m] menu    [:quit] save & exit"):
+    print(d("\n  " + msg))
+    ch = prompt_line(f"{g('> ')}").strip().lower()
+    if ch in (":quit", ":q"):
+        return "quit"
+    if ch in ("m", ":m", ":menu"):
+        return "menu"
+    return None
+
+
+def _ask_example(fam, goal, cmd, why, sim, show_answer=True):
+    """One worked example (or blind retest). Returns (status, first_try)."""
+    print(f"  {c('>>')} {b('Goal:')} {goal}")
+    if show_answer:
         print(f"  {b('How:')}  {c(cmd)}")
         flags = [tok for tok in normalize(cmd).split()[1:]
                  if tok.startswith("-") or tok.startswith("+")]
@@ -4145,26 +4241,155 @@ def _run_learn_flow(fam, prog):
             print(line)
         if why:
             print(f"  {d('Result: ' + why)}")
-        print(f"  {b('Type it to lock it in:')}")
-        while True:
-            ans = prompt_line(f"  {g('$ ')}").strip()
-            if not ans:
-                continue
+        print(f"\n  {b('Type it to lock it in:')}")
+    first = True
+    while True:
+        ans = prompt_line(f"  {g('$ ')}").strip()
+        if not ans:
+            continue
+        if ans in (":quit", ":q"):
+            return "quit", first
+        if ans in (":menu", ":m"):
+            return "menu", first
+        if ans in (":skip", ":n"):
+            if not show_answer:
+                print(f"  {y('Answer:')} {b(cmd)}")
+            return "skip", False
+        if check_answer(ans, {"accept": [cmd], "mode": "smart"}):
+            print()
+            print(f"{g('user@lab')}{d(':')}{c('~')}{d('$')} {ans}")
+            if sim:
+                print(sim)
+            print()
+            print(f"  {ok('Got it.')}")
+            return "ok", first
+        first = False
+        diff = flag_diff(ans, [cmd], fam)
+        if show_answer:
+            print(f"  {bad('Almost - the command is right above.')}")
+        else:
+            print(f"  {bad('Not quite.')}")
+        if diff:
+            render_diff(ans, diff)
+        if not show_answer:
+            print(f"\n  {c('>>')} {b('Goal:')} {goal}")
+
+
+def _run_learn_flow(fam, prog):
+    pool = fam_scenarios(fam)
+    sc0, _, _ = instantiate(pool[0])
+    examples = _learn_examples(fam)
+    flags = _lesson_flags(fam, examples)
+    steps = 4 if flags else 3
+    mem_step = steps
+    tm = _toolmode(prog, fam)
+    prog["last_tool"] = fam
+    missed_ex, missed_fl = [], []
+    first_ok = 0
+    total_q = 0
+
+    # ---- step 1: intro ----
+    clear_screen()
+    _hdr(fam, 1, steps, "Meet the tool")
+    print()
+    render_teach(sc0, ask=False)
+    res = _lesson_pause("[Enter] start the worked examples    [m] menu    [:quit] exit")
+    if res:
+        return res
+
+    # ---- step 2: worked examples, one per screen ----
+    for i, (goal, cmd, why, sim, sid) in enumerate(examples, 1):
+        clear_screen()
+        _hdr(fam, 2, steps, "Worked examples", f"{i} of {len(examples)}")
+        print()
+        status, first = _ask_example(fam, goal, cmd, why, sim)
+        if status in ("quit", "menu"):
+            return status
+        total_q += 1
+        if status == "ok":
+            tm["learn"] += 1
+            if first:
+                first_ok += 1
+            else:
+                missed_ex.append((goal, cmd))
+        else:
+            missed_ex.append((goal, cmd))
+        if status != "ok" or not first:
+            if sid:                       # missed a real scenario -> review it
+                prog["boxes"][sid] = 1
+                _schedule_review(prog, sid)
+        if i < len(examples):
+            res = _lesson_pause("[Enter] next example    [m] menu    [:quit] exit")
+            if res:
+                return res
+
+    # ---- step 3: flag recall ----
+    if flags:
+        clear_screen()
+        _hdr(fam, 3, steps, "Flag recall", f"{len(flags)} flags")
+        for i, (fl, mn) in enumerate(flags, 1):
+            print(f"\n  {c(str(i) + '.')} Which {b(fam)} flag means "
+                  f"{b(chr(39) + mn + chr(39))}?  {d('(:skip to reveal)')}")
+            clean = True
+            while True:
+                ans = prompt_line(f"  {g('flag> ')}").strip()
+                if ans in (":quit", ":q"):
+                    return "quit"
+                if ans in (":menu", ":m"):
+                    return "menu"
+                if ans in (":skip", ":n"):
+                    print(f"  {y('It is')} {b(fl)} {d('- ' + mn)}")
+                    clean = False
+                    break
+                if (ans and not ans.startswith(":")
+                        and ans.lstrip("-+") == fl.lstrip("-+")):
+                    print(f"  {ok('Right: ' + fl)}")
+                    break
+                clean = False
+                print(f"  {bad('Not quite.')} {d('Try again, or :skip')}")
+            total_q += 1
+            if clean:
+                first_ok += 1
+            else:
+                missed_fl.append((fl, mn))
+
+    # ---- retest of misses (blind) ----
+    if missed_ex or missed_fl:
+        clear_screen()
+        _hdr(fam, mem_step, steps, "Quick retest of what you missed")
+        for goal, cmd in missed_ex:
+            print()
+            status, _ = _ask_example(fam, goal, cmd, None, None,
+                                     show_answer=False)
+            if status in ("quit", "menu"):
+                return status
+        for fl, mn in missed_fl:
+            print(f"\n  Which {b(fam)} flag means {b(chr(39) + mn + chr(39))}?")
+            ans = prompt_line(f"  {g('flag> ')}").strip()
             if ans in (":quit", ":q"):
                 return "quit"
             if ans in (":menu", ":m"):
                 return "menu"
-            if ans in (":skip", ":n"):
-                break
-            if check_answer(ans, {"accept": [cmd], "mode": "smart"}):
-                tm["learn"] += 1
-                print(f"  {ok('Got it.')}")
-                break
-            diff = flag_diff(ans, [cmd], fam)
-            print(f"  {bad('Almost - the command is right above.')}")
-            if diff:
-                render_diff(ans, diff)
-    print(f"\n  {b('Now from memory - same tool, no answer shown:')}")
+            if ans and not ans.startswith(":") and ans.lstrip("-+") == fl.lstrip("-+"):
+                print(f"  {ok('Right: ' + fl)}")
+            else:
+                print(f"  {y('It is')} {b(fl)} {d('- ' + mn)}")
+
+    # ---- summary card ----
+    clear_screen()
+    _hdr(fam, mem_step, steps, "Lesson summary")
+    print()
+    print(f"  {b('Tool:')}      {c(fam)}")
+    print(f"  {b('Commands:')}  " + d("  |  ").join(c(cmd) for _, cmd, _, _, _ in examples))
+    if flags:
+        print(f"  {b('Flags:')}     " + "  ".join(c(fl) for fl, _ in flags))
+    pct = (first_ok / total_q * 100) if total_q else 0
+    col = g if pct >= 80 else (y if pct >= 60 else r)
+    print(f"  {b('First-try:')} {col(f'{first_ok}/{total_q} ({pct:.0f}%)')}")
+    print(f"\n  {b('Next:')} memory reps - same tool, no answers shown.")
+    res = _lesson_pause("[Enter] start memory reps    [m] menu    [:quit] exit")
+    if res:
+        return res
     return study_loop(pool, "tutorial", prog, session_len=5,
                       label=f"learning {fam}")
 
@@ -4207,12 +4432,18 @@ def study_loop(pool, difficulty, prog, session_len=8, label=""):
     """Core loop with finishable session checkpoints."""
     last_id = None
     answered = 0
+    run_streak = 0
     start_correct = prog.get("correct", 0)
     clear_screen()
     while True:
         sc = weighted_pick(pool, prog, exclude=last_id if len(pool) > 1 else None)
         last_id = sc["id"]
+        pre_correct = prog.get("correct", 0)
         result = ask_scenario(sc, prog, difficulty)
+        got_it = prog.get("correct", 0) > pre_correct
+        run_streak = run_streak + 1 if got_it else 0
+        if got_it and run_streak >= 3:
+            print(f"  {m('▲ streak ' + str(run_streak))}")
         if result == "done" and difficulty in ("tutorial", "learn"):
             result = drill_loop(sc, prog)
         if result in ("quit", "menu"):
@@ -4248,22 +4479,877 @@ def study_loop(pool, difficulty, prog, session_len=8, label=""):
             clear_screen()
 
 
+# --------------------------------------------------------------------------- #
+#  INCIDENT MODE - multi-step troubleshooting cases. You get symptoms, you
+#  investigate with real commands (each returns simulated system state), you
+#  find the root cause, you fix it. This is PBQ practice.
+# --------------------------------------------------------------------------- #
+
+INCIDENTS = [
+    {"id": "inc-unit-down", "title": "Web app down after last night's reboot",
+     "obj": "5.2", "par": 3,
+     "symptom": "Monitoring says the company site has been DOWN since the "
+                "server rebooted overnight. Nobody changed any code.",
+     "investigate": [
+         {"a": ["systemctl status nginx", "systemctl status nginx.service"],
+          "out": "\u25cb nginx.service - A high performance web server\n"
+                 "     Loaded: loaded (/usr/lib/systemd/system/nginx.service; disabled)\n"
+                 "     Active: inactive (dead)", "clue": True,
+          "why": "inactive + DISABLED: it was only ever started manually"},
+         {"a": ["systemctl is-enabled nginx", "systemctl is-enabled nginx.service"],
+          "out": "disabled", "clue": True,
+          "why": "confirms nginx will never start at boot"},
+         {"a": ["journalctl -u nginx -b", "journalctl -u nginx", "journalctl -xeu nginx"],
+          "out": "-- No entries --"},
+         {"a": ["ss -tulpn", "ss -tlnp", "ss -tln"],
+          "out": "tcp   LISTEN 0  128  0.0.0.0:22  users:((\"sshd\",pid=812,fd=3))"},
+         {"a": ["curl -I http://localhost", "curl http://localhost",
+                "curl -I localhost", "curl localhost"],
+          "out": "curl: (7) Failed to connect to localhost port 80: Connection refused"},
+     ],
+     "fix": [{"a": ["systemctl enable --now nginx",
+                    "systemctl enable --now nginx.service"],
+              "out": "Created symlink /etc/systemd/system/multi-user.target."
+                     "wants/nginx.service \u2192 /usr/lib/systemd/system/nginx.service."}],
+     "traps": [
+         {"a": ["systemctl start nginx", "systemctl start nginx.service"],
+          "msg": "That brings it up NOW - but it's disabled, so the next "
+                 "reboot kills it again. Fix it for good."},
+         {"a": ["systemctl restart nginx", "systemctl restart nginx.service"],
+          "msg": "Same story: running now, still disabled at boot."},
+         {"a": ["systemctl enable nginx", "systemctl enable nginx.service"],
+          "msg": "Boot is fixed - but the site is still down right now. "
+                 "One flag does both."}],
+     "hints": ["The service isn't crashed - look at its boot-time state.",
+               "systemctl status shows 'disabled'. What fixes boot AND now?",
+               "systemctl enable --now nginx"],
+     "explain": "Classic post-reboot outage: someone started the service "
+                "manually and never enabled it. `enable --now` fixes both "
+                "boot persistence and the current state in one command."},
+
+    {"id": "inc-selinux-403", "title": "Website returns 403 after content migration",
+     "obj": "5.4", "par": 4,
+     "symptom": "Since the web files were copied from /root/site-backup to "
+                "/var/www/html last night, every page returns '403 Forbidden'. "
+                "nginx is running and file permissions look normal.",
+     "investigate": [
+         {"a": ["systemctl status nginx", "systemctl status nginx.service"],
+          "out": "\u25cf nginx.service - active (running) since 02:14 UTC"},
+         {"a": ["curl -I http://localhost", "curl http://localhost",
+                "curl -I localhost", "curl localhost"],
+          "out": "HTTP/1.1 403 Forbidden"},
+         {"a": ["ls -l /var/www/html", "ls -la /var/www/html", "ls -lah /var/www/html"],
+          "out": "-rw-r--r--. 1 root root 615 Jun 10 02:11 index.html"},
+         {"a": ["getenforce"], "out": "Enforcing", "clue": True,
+          "why": "SELinux is enforcing - contexts matter"},
+         {"a": ["ls -Z /var/www/html", "ls -lZ /var/www/html",
+                "ls -Z /var/www/html/index.html"],
+          "out": "-rw-r--r--. root root unconfined_u:object_r:admin_home_t:s0 index.html",
+          "clue": True,
+          "why": "admin_home_t: the files kept their /root context - nginx "
+                 "may not read that"},
+         {"a": ["journalctl -u nginx -b", "journalctl -u nginx"],
+          "out": "nginx[1490]: open() \"/var/www/html/index.html\" failed "
+                 "(13: Permission denied)"},
+     ],
+     "fix": [{"a": ["restorecon -Rv /var/www/html", "restorecon -R /var/www/html",
+                    "restorecon -Rv /var/www/html/", "restorecon -R -v /var/www/html"],
+              "out": "Relabeled /var/www/html/index.html from admin_home_t "
+                     "to httpd_sys_content_t"}],
+     "traps": [
+         {"a": ["setenforce 0"],
+          "msg": "That 'fixes' it by turning off security for everything. "
+                 "Fix the labels, not the policy."},
+         {"a": ["chmod -R 755 /var/www/html", "chmod 755 /var/www/html",
+                "chmod -R 777 /var/www/html"],
+          "msg": "Permissions were never the problem - look at the file "
+                 "CONTEXT (ls -Z)."}],
+     "hints": ["Permissions are fine, the daemon runs... what else gates access?",
+               "ls -Z - the files were born in /root and kept its label.",
+               "restorecon -Rv /var/www/html"],
+     "explain": "Files moved from /root keep admin_home_t. restorecon "
+                "reapplies the policy's correct context (httpd_sys_content_t). "
+                "On the exam: 403 + Enforcing = check contexts first."},
+
+    {"id": "inc-fw-blocked", "title": "New API unreachable from other hosts",
+     "obj": "5.3", "par": 4,
+     "symptom": "The new API on port 8443 works with curl ON the server, but "
+                "every other host gets 'connection timed out'.",
+     "investigate": [
+         {"a": ["curl -I https://localhost:8443", "curl https://localhost:8443",
+                "curl -k https://localhost:8443", "curl localhost:8443"],
+          "out": "HTTP/2 200"},
+         {"a": ["ss -tulpn", "ss -tlnp", "ss -tln"],
+          "out": "tcp  LISTEN 0 511  0.0.0.0:8443  users:((\"api\",pid=2210,fd=6))",
+          "clue": True, "why": "bound to 0.0.0.0 - the app itself is fine"},
+         {"a": ["firewall-cmd --list-all"],
+          "out": "public (active)\n  services: ssh\n  ports: \n  forward: no",
+          "clue": True, "why": "8443 is not open in the active zone"},
+         {"a": ["firewall-cmd --list-ports"], "out": "(empty)"},
+         {"a": ["getenforce"], "out": "Enforcing"},
+         {"a": ["ip a", "ip addr", "ip address", "ip -br a"],
+          "out": "eth0: inet 10.0.0.12/24 scope global"},
+     ],
+     "fix": [
+         {"a": ["firewall-cmd --permanent --add-port=8443/tcp",
+                "firewall-cmd --add-port=8443/tcp --permanent"],
+          "out": "success",
+          "next": "Saved to the permanent config - now make the running "
+                  "firewall pick it up."},
+         {"a": ["firewall-cmd --reload"], "out": "success"}],
+     "traps": [
+         {"a": ["firewall-cmd --add-port=8443/tcp"],
+          "msg": "Runtime-only: works until the next reload/reboot, then the "
+                 "ticket comes back. Make it permanent."},
+         {"a": ["systemctl stop firewalld", "systemctl disable firewalld"],
+          "msg": "Dropping the whole firewall to open one port is how "
+                 "breaches happen. Open the port."}],
+     "hints": ["Local works, remote times out - what sits between them?",
+               "firewall-cmd --list-all: the zone only allows ssh.",
+               "Permanent rule + reload: two commands."],
+     "explain": "Listening on 0.0.0.0 but filtered: a firewall problem. "
+                "--permanent writes config without touching runtime, so "
+                "--reload is the mandatory second step."},
+
+    {"id": "inc-disk-full", "title": "App crashes: 'No space left on device'",
+     "obj": "5.2", "par": 3,
+     "symptom": "The reporting app keeps crashing with 'OSError: No space "
+                "left on device' when writing to /var/reports.",
+     "investigate": [
+         {"a": ["df -h", "df"],
+          "out": "Filesystem      Size  Used Avail Use% Mounted on\n"
+                 "/dev/sda2        97G   97G     0 100% /\n"
+                 "/dev/sda1       974M  201M  706M  23% /boot",
+          "clue": True, "why": "the root filesystem is at 100%"},
+         {"a": ["du -sh /var/log", "du -sh /var/log/*", "du -h /var/log"],
+          "out": "18G  /var/log/journal\n412M /var/log/syslog",
+          "clue": True, "why": "the journal has eaten 18G"},
+         {"a": ["df -i"],
+          "out": "/dev/sda2  6553600  84211  6469389  2% /"},
+         {"a": ["lsblk", "lsblk -f"],
+          "out": "sda2  8:2  0  99G  0 part /"},
+     ],
+     "fix": [{"a": ["journalctl --vacuum-size=500M", "journalctl --vacuum-size=1G",
+                    "journalctl --vacuum-size=200M", "journalctl --vacuum-time=7d",
+                    "journalctl --vacuum-time=2weeks"],
+              "out": "Vacuuming done, freed 17.5G of archived journals."}],
+     "traps": [
+         {"a": ["rm -rf /var/log/journal", "rm -rf /var/log"],
+          "msg": "That nukes the ACTIVE journal too (and possibly files held "
+                 "open, freeing nothing). journalctl can trim itself safely."}],
+     "hints": ["First question for any write failure: how full is the disk?",
+               "du points at /var/log/journal. journald can clean itself.",
+               "journalctl --vacuum-size=500M (or --vacuum-time=7d)"],
+     "explain": "df -h finds the full filesystem, du finds the eater, and "
+                "--vacuum-size/--vacuum-time trims archived journals safely. "
+                "Persist a cap with SystemMaxUse= in journald.conf."},
+
+    {"id": "inc-dns-broken", "title": "Server can't reach anything by name",
+     "obj": "5.3", "par": 3,
+     "symptom": "apt update fails with 'Temporary failure resolving "
+                "archive.ubuntu.com'. The network was 'reconfigured' this "
+                "morning.",
+     "investigate": [
+         {"a": ["ping -c 4 8.8.8.8", "ping -c4 8.8.8.8", "ping 8.8.8.8"],
+          "out": "64 bytes from 8.8.8.8: icmp_seq=1 ttl=117 time=11.2 ms",
+          "clue": True, "why": "raw IP connectivity works - this is DNS, not routing"},
+         {"a": ["ping archive.ubuntu.com", "ping -c 4 archive.ubuntu.com",
+                "ping -c4 archive.ubuntu.com"],
+          "out": "ping: archive.ubuntu.com: Temporary failure in name resolution"},
+         {"a": ["resolvectl status", "resolvectl"],
+          "out": "Link 2 (eth0)\n    Current Scopes: none\n    DNS Servers: (none)",
+          "clue": True, "why": "eth0 has NO DNS servers configured"},
+         {"a": ["cat /etc/resolv.conf"],
+          "out": "nameserver 127.0.0.53\noptions edns0 trust-ad"},
+         {"a": ["dig example.com", "nslookup example.com"],
+          "out": ";; communications error to 127.0.0.53#53: timed out"},
+         {"a": ["ip route", "ip r"],
+          "out": "default via 10.0.0.1 dev eth0 proto static"},
+     ],
+     "fix": [{"a": ["resolvectl dns eth0 1.1.1.1", "resolvectl dns eth0 8.8.8.8",
+                    "resolvectl dns eth0 9.9.9.9",
+                    "resolvectl dns eth0 1.1.1.1 8.8.8.8"],
+              "out": "(resolvectl: DNS server set for eth0)"}],
+     "traps": [
+         {"a": ["systemctl restart systemd-resolved"],
+          "msg": "Restarting won't invent servers that were never configured. "
+                 "Give eth0 a DNS server."}],
+     "hints": ["Ping an IP, then ping a NAME - which one fails?",
+               "resolvectl status: eth0 has no DNS servers at all.",
+               "resolvectl dns eth0 1.1.1.1"],
+     "explain": "IP works + names fail = DNS. resolvectl status pinpoints "
+                "the link with no servers; resolvectl dns sets one at runtime "
+                "(persist via netplan/NetworkManager)."},
+
+    {"id": "inc-cron-perms", "title": "Nightly backup silently stopped running",
+     "obj": "5.4", "par": 3,
+     "symptom": "The 02:00 backup hasn't produced a file in three days. The "
+                "cron entry is still there and wasn't changed - but the "
+                "script was 'redeployed' from git recently.",
+     "investigate": [
+         {"a": ["crontab -l"],
+          "out": "0 2 * * * /usr/local/bin/backup.sh"},
+         {"a": ["journalctl -u cron", "journalctl -u crond",
+                "journalctl -u cron -b", "grep CRON /var/log/syslog"],
+          "out": "CRON[18841]: (root) CMD (/usr/local/bin/backup.sh)\n"
+                 "CRON[18841]: (root) ERROR: /usr/local/bin/backup.sh: "
+                 "Permission denied", "clue": True,
+          "why": "cron runs it, the kernel refuses to execute it"},
+         {"a": ["ls -l /usr/local/bin/backup.sh", "ls -la /usr/local/bin/backup.sh",
+                "stat /usr/local/bin/backup.sh"],
+          "out": "-rw-r--r-- 1 root root 2148 Jun 08 17:30 /usr/local/bin/backup.sh",
+          "clue": True, "why": "rw-r--r--: the execute bit vanished in the redeploy"},
+         {"a": ["lsattr /usr/local/bin/backup.sh"],
+          "out": "--------------e------- /usr/local/bin/backup.sh"},
+         {"a": ["ls -Z /usr/local/bin/backup.sh"],
+          "out": "unconfined_u:object_r:bin_t:s0 /usr/local/bin/backup.sh"},
+     ],
+     "fix": [{"a": ["chmod +x /usr/local/bin/backup.sh",
+                    "chmod a+x /usr/local/bin/backup.sh",
+                    "chmod u+x /usr/local/bin/backup.sh",
+                    "chmod 755 /usr/local/bin/backup.sh"],
+              "out": ""}],
+     "traps": [
+         {"a": ["chmod 777 /usr/local/bin/backup.sh"],
+          "msg": "Executable, yes - and now world-WRITABLE, so anyone can "
+                 "edit a script root runs nightly. 755."}],
+     "hints": ["The entry fires - check what happens when it fires (logs).",
+               "ls -l: count the permission bits on that script.",
+               "chmod 755 /usr/local/bin/backup.sh"],
+     "explain": "Git checkouts and copies can drop the execute bit. The "
+                "chain: cron log shows 'Permission denied' -> ls -l shows "
+                "rw-r--r-- -> chmod 755. Silent failures live in logs."},
+
+    {"id": "inc-time-drift", "title": "apt/TLS suddenly failing everywhere",
+     "obj": "5.2", "par": 3,
+     "symptom": "Every HTTPS connection fails with 'certificate is not yet "
+                "valid', and apt update refuses all repos. Started after the "
+                "VM was restored from a snapshot.",
+     "investigate": [
+         {"a": ["timedatectl", "timedatectl status"],
+          "out": "               Local time: Tue 2024-01-02 04:11:09 UTC\n"
+                 "System clock synchronized: no\n"
+                 "              NTP service: inactive", "clue": True,
+          "why": "the clock is YEARS behind and NTP is off"},
+         {"a": ["date"], "out": "Tue Jan  2 04:11:12 UTC 2024", "clue": True,
+          "why": "confirms massive clock drift"},
+         {"a": ["curl -I https://example.com", "curl https://example.com"],
+          "out": "curl: (60) SSL certificate problem: certificate is not yet valid"},
+         {"a": ["ping -c 4 8.8.8.8", "ping 8.8.8.8", "ping -c4 8.8.8.8"],
+          "out": "64 bytes from 8.8.8.8: icmp_seq=1 ttl=117 time=11.0 ms"},
+     ],
+     "fix": [{"a": ["timedatectl set-ntp true", "timedatectl set-ntp on",
+                    "timedatectl set-ntp 1"],
+              "out": "(NTP re-enabled - clock synchronizing)"}],
+     "traps": [
+         {"a": ["date -s 2026-06-11", "date -s now"],
+          "msg": "Setting it by hand works for an hour - until it drifts "
+                 "again. Turn the sync service on."}],
+     "hints": ["'Not yet valid' means the cert starts in the FUTURE... or "
+               "your clock lives in the past.",
+               "timedatectl: NTP is inactive after the snapshot restore.",
+               "timedatectl set-ntp true"],
+     "explain": "Snapshot restores resurrect old clocks. TLS validity windows "
+                "then fail in both directions. set-ntp true re-enables "
+                "systemd-timesyncd and the clock self-heals."},
+
+    {"id": "inc-ssh-key", "title": "SSH key login broken for one user",
+     "obj": "5.4", "par": 4,
+     "symptom": "marco's key-based SSH suddenly prompts for a password. His "
+                "key is unchanged. He recently ran a 'permissions cleanup "
+                "script' in his home directory.",
+     "investigate": [
+         {"a": ["journalctl -u sshd", "journalctl -u sshd -b",
+                "journalctl -u ssh", "grep sshd /var/log/auth.log"],
+          "out": "sshd[7741]: Authentication refused: bad ownership or modes "
+                 "for directory /home/marco/.ssh", "clue": True,
+          "why": "sshd itself names the problem: modes on ~/.ssh"},
+         {"a": ["ls -ld /home/marco/.ssh", "ls -la /home/marco/.ssh",
+                "ls -l /home/marco/.ssh", "stat /home/marco/.ssh"],
+          "out": "drwxrwxrwx 2 marco marco 4096 Jun 10 09:12 /home/marco/.ssh",
+          "clue": True, "why": "777 on ~/.ssh - sshd refuses world-writable"},
+         {"a": ["ls -l /home/marco/.ssh/authorized_keys",
+                "stat /home/marco/.ssh/authorized_keys"],
+          "out": "-rw-rw-rw- 1 marco marco 581 Jun 10 09:12 authorized_keys",
+          "clue": True, "why": "authorized_keys is world-writable too"},
+         {"a": ["systemctl status sshd", "systemctl status ssh"],
+          "out": "\u25cf sshd.service - active (running)"},
+     ],
+     "fix": [
+         {"a": ["chmod 700 /home/marco/.ssh"],
+          "out": "", "next": "Directory locked down - now the key file itself."},
+         {"a": ["chmod 600 /home/marco/.ssh/authorized_keys"],
+          "out": ""}],
+     "traps": [
+         {"a": ["systemctl restart sshd", "systemctl restart ssh"],
+          "msg": "sshd isn't broken - it's correctly REFUSING insecure modes. "
+                 "Fix the permissions."}],
+     "hints": ["When keys silently fall back to passwords, read sshd's log.",
+               "sshd demands ~/.ssh be 700 and authorized_keys 600.",
+               "chmod 700 on the dir, then chmod 600 on authorized_keys."],
+     "explain": "sshd's StrictModes rejects world-accessible key paths: "
+                "~/.ssh must be 700, authorized_keys 600. The log line names "
+                "it exactly - always read the daemon's own log first."},
+
+    {"id": "inc-mtu", "title": "Transfers to the VPN site stall at random",
+     "obj": "5.3", "par": 3,
+     "symptom": "Small requests to the remote office (over the new VPN) work, "
+                "but any large transfer hangs forever. Other destinations are "
+                "fine.",
+     "investigate": [
+         {"a": ["ping -c 4 10.8.0.10", "ping 10.8.0.10", "ping -c4 10.8.0.10"],
+          "out": "64 bytes from 10.8.0.10: icmp_seq=1 ttl=63 time=24.1 ms"},
+         {"a": ["ping -c 4 -s 1472 10.8.0.10", "ping -s 1472 10.8.0.10",
+                "ping -M do -s 1472 10.8.0.10", "ping -c4 -s 1472 10.8.0.10"],
+          "out": "ping: local error: message too long, mtu=1500\n"
+                 "(no replies for 1472-byte payloads)", "clue": True,
+          "why": "big packets die, small ones pass: the path MTU is below 1500"},
+         {"a": ["ip link", "ip link show eth0", "ip l"],
+          "out": "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500",
+          "clue": True, "why": "the NIC still assumes 1500 - too big for the VPN path"},
+         {"a": ["ip route", "ip r"],
+          "out": "10.8.0.0/24 via 10.0.0.1 dev eth0 proto static"},
+         {"a": ["mtr 10.8.0.10", "traceroute 10.8.0.10"],
+          "out": "1. _gateway 0.6ms   2. vpn-gw 22.8ms   3. 10.8.0.10 24.0ms"},
+     ],
+     "fix": [{"a": ["ip link set eth0 mtu 1400", "ip link set dev eth0 mtu 1400",
+                    "ip link set mtu 1400 dev eth0"],
+              "out": ""}],
+     "traps": [
+         {"a": ["systemctl restart NetworkManager"],
+          "msg": "Restarting the network stack re-applies the SAME 1500 MTU. "
+                 "The size itself is the problem."}],
+     "hints": ["Small OK + large hangs is a packet SIZE problem.",
+               "ping -s 1472 (1500-byte frames) gets no replies over the VPN.",
+               "Lower the interface MTU: ip link set eth0 mtu 1400"],
+     "explain": "VPN encapsulation steals header room, shrinking the usable "
+                "path MTU. ping -s probes it; ip link set ... mtu fixes it at "
+                "runtime (persist in netplan/NM). Exam keyword: MTU mismatch."},
+
+    {"id": "inc-inodes", "title": "Disk 'full' but df shows free space",
+     "obj": "5.2", "par": 3,
+     "symptom": "The mail relay fails with 'No space left on device', but "
+                "df -h says the disk is only 40% used.",
+     "investigate": [
+         {"a": ["df -h", "df"],
+          "out": "/dev/sda2        97G   38G   59G  40% /"},
+         {"a": ["df -i"],
+          "out": "Filesystem      Inodes   IUsed  IFree IUse% Mounted on\n"
+                 "/dev/sda2      6553600 6553600      0  100% /", "clue": True,
+          "why": "bytes are free but the INODES are exhausted"},
+         {"a": ["du -sh /var/spool/mqueue", "du -sh /var/spool",
+                "du -h /var/spool"],
+          "out": "2.1G  /var/spool/mqueue"},
+         {"a": ["find /var/spool/mqueue -type f | wc -l",
+                "ls /var/spool/mqueue | wc -l"],
+          "out": "6210488", "clue": True,
+          "why": "six MILLION tiny queue files - each one eats an inode"},
+     ],
+     "fix": [{"a": ["find /var/spool/mqueue -type f -delete",
+                    "find /var/spool/mqueue -type f -mtime +1 -delete"],
+              "out": "(queue purged - inodes freed)"}],
+     "traps": [
+         {"a": ["rm /var/spool/mqueue/*", "rm -f /var/spool/mqueue/*"],
+          "msg": "The shell expands * into six million arguments: 'argument "
+                 "list too long'. find -delete streams them instead."}],
+     "hints": ["df -h fine + 'no space' = check the OTHER df.",
+               "df -i: IUse% is 100. Something made millions of tiny files.",
+               "find /var/spool/mqueue -type f -delete"],
+     "explain": "Filesystems can run out of inodes long before bytes. df -i "
+                "is the tell; find -delete clears huge file sets where rm * "
+                "chokes. Exam keyword: inode exhaustion."},
+]
+
+
+def run_incident(inc, prog):
+    """One troubleshooting case. Returns 'list', 'menu', or 'quit'."""
+    clear_screen()
+    raw = f"── INCIDENT: {inc['title']}  ·  obj {inc['obj']}"
+    print(m(raw + " " + "─" * max(2, 69 - len(raw))))
+    print()
+    print(f"  {c('>>')} {b('Symptoms:')} {inc['symptom']}")
+    print()
+    print(d("  Investigate with real commands. The system answers like a live"))
+    print(d("  box. When you know the root cause, type the FIX command."))
+    print(d("  :hint nudge   :giveup reveal   :menu exit"))
+    stages = inc["fix"]
+    stage = 0
+    steps = 0
+    used_hint = False
+    found = set()
+    while True:
+        ans = prompt_line(f"\n{g('$ ')}").strip()
+        if not ans:
+            continue
+        if ans in (":quit", ":q"):
+            return "quit"
+        if ans in (":menu", ":m"):
+            return "menu"
+        if ans in (":hint",):
+            used_hint = True
+            hints = inc["hints"]
+            idx = min(len(hints) - 1, getattr(run_incident, "_h", 0))
+            shown = sum(1 for x in found if x.startswith("_hint"))
+            shown = min(len(hints) - 1, shown)
+            print(f"  {y('hint ' + str(shown + 1) + ':')} {hints[shown]}")
+            found.add("_hint" + str(shown))
+            continue
+        if ans in (":giveup", ":answer", ":a"):
+            print(f"\n  {b('The diagnostic chain:')}")
+            for probe in inc["investigate"]:
+                if probe.get("clue"):
+                    print(f"    {c(probe['a'][0]):<42} {d(probe['why'])}")
+            for st in stages:
+                print(f"  {y('Fix:')} {b(st['a'][0])}")
+            print(f"\n  {d(inc['explain'])}")
+            rec = prog.setdefault("incidents", {}).setdefault(
+                inc["id"], {"solved": False, "best": None})
+            res = _lesson_pause("[Enter] back to incidents    [m] menu    [:quit] exit")
+            return res if res else "list"
+        steps += 1
+        # fix stage?
+        st = stages[stage]
+        if check_answer(ans, {"accept": st["a"], "mode": "smart"}):
+            print()
+            print(f"{g('user@lab')}{d(':')}{c('~')}{d('$')} {ans}")
+            if st.get("out"):
+                print(st["out"])
+            stage += 1
+            if stage < len(stages):
+                print()
+                print(f"  {y('\u25b6')} {st.get('next', 'Good - one more step.')}")
+                continue
+            # solved!
+            print()
+            par = inc.get("par", 4)
+            tag = f"SOLVED in {steps} commands (par {par})"
+            tag += " - with hints" if used_hint else ""
+            print(f"  {ok(tag)}")
+            print()
+            print(f"  {b('The diagnostic chain:')}")
+            for probe in inc["investigate"]:
+                if probe.get("clue"):
+                    mark = g("\u2713") if probe["a"][0] in found else d("\u00b7")
+                    print(f"   {mark} {c(probe['a'][0]):<42} {d(probe['why'])}")
+            print()
+            print(f"  {d(inc['explain'])}")
+            rec = prog.setdefault("incidents", {}).setdefault(
+                inc["id"], {"solved": False, "best": None})
+            rec["solved"] = True
+            rec["best"] = steps if rec["best"] is None else min(rec["best"], steps)
+            res = _lesson_pause("[Enter] back to incidents    [m] menu    [:quit] exit")
+            return res if res else "list"
+        # trap?
+        trap_msg = None
+        for tr in inc.get("traps", []):
+            if check_answer(ans, {"accept": tr["a"], "mode": "smart"}):
+                trap_msg = tr["msg"]
+                break
+        if trap_msg:
+            print()
+            print(f"{g('user@lab')}{d(':')}{c('~')}{d('$')} {ans}")
+            print(f"  {bad('Hold on.')} {y(trap_msg)}")
+            continue
+        # investigation probe?
+        hit = None
+        for probe in inc["investigate"]:
+            if check_answer(ans, {"accept": probe["a"], "mode": "smart"}):
+                hit = probe
+                break
+        print()
+        print(f"{g('user@lab')}{d(':')}{c('~')}{d('$')} {ans}")
+        if hit:
+            print(hit["out"])
+            if hit.get("clue"):
+                found.add(hit["a"][0])
+        else:
+            print(d("(nothing unusual)"))
+
+
+def incident_mode(prog):
+    while True:
+        recs = prog.get("incidents", {})
+
+        def _line(inc):
+            rec = recs.get(inc["id"])
+            if rec and rec.get("solved"):
+                mark = g("\u2713 solved in " + str(rec["best"]))
+            else:
+                mark = d("unsolved")
+            return f"{inc['title']}  {d('· obj ' + inc['obj'])}  [{mark}]"
+
+        pick = _pick_numbered("INCIDENTS - pick a case:", INCIDENTS, _line)
+        if pick == ":quit":
+            return "quit"
+        if pick is None or pick == ":mainmenu":
+            return "menu"
+        res = run_incident(pick, prog)
+        if res in ("quit", "menu"):
+            return res
+
+
+# --------------------------------------------------------------------------- #
+#  CONCEPT DRILLS - multiple-choice cards for the no-command exam topics.
+#  opts[0] is always the correct answer (shuffled at display time).
+# --------------------------------------------------------------------------- #
+
+OBJ_TITLES = {
+    "1.1": "Linux concepts", "1.2": "Device management", "1.3": "Storage",
+    "1.4": "Network services", "1.5": "Shell operations", "1.6": "Backup",
+    "1.7": "Virtualization", "2.1": "Files & directories",
+    "2.2": "Account management", "2.3": "Processes & jobs",
+    "2.4": "Software management", "2.5": "systemd", "2.6": "Containers",
+    "3.1": "OS hardening", "3.2": "Firewalls", "3.3": "AAA & logging",
+    "4.1": "Automation/orchestration", "4.2": "Shell scripting",
+    "4.4": "Version control", "5.1": "Monitoring", "5.2": "HW/storage/OS",
+    "5.3": "Network issues", "5.4": "Security issues", "5.5": "Performance",
+}
+
+CONCEPTS = [
+    {"id": "cn-boot-order", "obj": "1.1",
+     "q": "What is the correct order of the Linux boot process?",
+     "opts": ["Firmware -> bootloader -> kernel -> initrd -> init/systemd",
+              "Bootloader -> firmware -> initrd -> kernel -> init/systemd",
+              "Kernel -> bootloader -> firmware -> systemd -> initrd",
+              "Firmware -> kernel -> bootloader -> systemd -> initrd"],
+     "why": "BIOS/UEFI hands off to GRUB, which loads the kernel + initrd; "
+            "the kernel then starts PID 1 (systemd)."},
+    {"id": "cn-initrd", "obj": "1.1",
+     "q": "What is the purpose of the initrd/initramfs?",
+     "opts": ["A temporary root filesystem with the drivers needed to mount the real root",
+              "A backup of /boot restored on kernel panic",
+              "The kernel's swap area during early boot",
+              "A cache that speeds up repeated reboots"],
+     "why": "It carries storage/LVM/RAID modules so the kernel can reach the "
+            "real root fs. Rebuild it with dracut/update-initramfs."},
+    {"id": "cn-pxe", "obj": "1.1",
+     "q": "PXE is best described as:",
+     "opts": ["Booting a machine over the network from a server-provided image",
+              "A UEFI secure-boot signing standard",
+              "A partition scheme for disks over 2 TB",
+              "A kernel parameter for emergency mode"],
+     "why": "Preboot eXecution Environment: NIC firmware pulls a boot image "
+            "via DHCP+TFTP - mass provisioning's foundation."},
+    {"id": "cn-fhs-var", "obj": "1.1",
+     "q": "Per the FHS, which directory holds logs, spools, and other data "
+          "that changes while the system runs?",
+     "opts": ["/var", "/usr", "/etc", "/opt"],
+     "why": "/var = variable data: logs, mail/print spools, caches. /etc is "
+            "config, /usr is read-only software, /opt is add-on apps."},
+    {"id": "cn-copyleft", "obj": "1.1",
+     "q": "'Copyleft' licensing (e.g. GPL) means:",
+     "opts": ["Derivative works must be released under the same license",
+              "The software may never be sold commercially",
+              "The author renounces the copyright entirely",
+              "Only the original author may modify the source"],
+     "why": "Copyleft keeps derivatives open under the same terms. Permissive "
+            "licenses (MIT/BSD) allow closed derivatives; selling GPL code is fine."},
+    {"id": "cn-wayland", "obj": "1.1",
+     "q": "Wayland is:",
+     "opts": ["A modern display server protocol replacing the X server",
+              "A display manager that handles graphical logins",
+              "A window manager theme engine",
+              "A GPU driver framework in the kernel"],
+     "why": "Wayland replaces X11's protocol. Display managers (gdm, sddm) "
+            "handle logins; window managers arrange windows on top."},
+    {"id": "cn-nsswitch", "obj": "1.4",
+     "q": "/etc/nsswitch.conf controls:",
+     "opts": ["The order of sources (files, DNS, LDAP...) for lookups like hosts and passwd",
+              "Which network interface is the default route",
+              "The firewall zone assigned to each NIC",
+              "Kernel network parameters like ip_forward"],
+     "why": "Name Service Switch: e.g. 'hosts: files dns' means /etc/hosts "
+            "is consulted before DNS."},
+    {"id": "cn-pam", "obj": "3.3",
+     "q": "PAM (Pluggable Authentication Modules) provides:",
+     "opts": ["A stackable framework that services use to authenticate users",
+              "Encrypted storage for password hashes",
+              "Kernel-level mandatory access control",
+              "A network protocol for single sign-on"],
+     "why": "Services (sshd, sudo, login) call PAM stacks in /etc/pam.d/ - "
+            "that's where password policy and MFA modules plug in."},
+    {"id": "cn-kerberos", "obj": "3.3",
+     "q": "Kerberos authenticates users primarily by:",
+     "opts": ["Issuing time-limited tickets from a trusted KDC",
+              "Comparing salted hashes in /etc/shadow",
+              "Exchanging SSH public keys",
+              "Signing X.509 certificates per login"],
+     "why": "Ticket-based SSO: hence Kerberos breaks badly when clocks drift "
+            "- another reason NTP matters."},
+    {"id": "cn-sssd", "obj": "3.3",
+     "q": "SSSD's role on a Linux client is to:",
+     "opts": ["Connect the system to central identity providers (LDAP/AD) with caching",
+              "Synchronize /etc/passwd between servers over SSH",
+              "Provide sudo rules from the local database only",
+              "Rotate Kerberos keytabs automatically"],
+     "why": "System Security Services Daemon: brokers LDAP/AD/Kerberos and "
+            "caches credentials for offline logins."},
+    {"id": "cn-polkit", "obj": "3.3",
+     "q": "Polkit differs from sudo in that it:",
+     "opts": ["Grants fine-grained privileges for specific D-Bus/desktop actions",
+              "Replaces the password database",
+              "Only works for the root account",
+              "Encrypts privileged network traffic"],
+     "why": "Polkit authorizes specific actions (mount a disk, restart a "
+            "service) for processes; sudo elevates whole commands."},
+    {"id": "cn-sighup", "obj": "2.3",
+     "q": "Sending SIGHUP (signal 1) to a daemon conventionally makes it:",
+     "opts": ["Reload its configuration without a full restart",
+              "Terminate immediately and uncatchably",
+              "Pause until it receives SIGCONT",
+              "Lower its scheduling priority"],
+     "why": "kill -HUP = 'reload config' by convention. 9 (KILL) is the "
+            "uncatchable terminator, 19/18 are STOP/CONT."},
+    {"id": "cn-target", "obj": "2.5",
+     "q": "The systemd equivalent of the old 'runlevel 3' (multi-user, no GUI) is:",
+     "opts": ["multi-user.target", "graphical.target", "rescue.target",
+              "default.target"],
+     "why": "multi-user.target = text multi-user; graphical.target adds the "
+            "display manager; set it with systemctl set-default."},
+    {"id": "cn-ctr-nets", "obj": "2.6",
+     "q": "A container on a BRIDGE network differs from HOST networking because it:",
+     "opts": ["Gets its own network namespace and needs -p to expose ports",
+              "Shares the host's interfaces and ports directly",
+              "Has no network connectivity at all",
+              "Can only reach other containers, never the internet"],
+     "why": "Bridge = private namespace behind NAT (hence -p 8080:80); host "
+            "mode shares the host stack; none = no networking."},
+    {"id": "cn-entrypoint", "obj": "2.6",
+     "q": "In a Dockerfile, the practical difference between ENTRYPOINT and CMD is:",
+     "opts": ["ENTRYPOINT is the fixed executable; CMD supplies default args users can override",
+              "CMD runs at build time, ENTRYPOINT at run time",
+              "ENTRYPOINT may appear multiple times, CMD only once",
+              "They are interchangeable aliases"],
+     "why": "`docker run image newargs` replaces CMD but is appended to "
+            "ENTRYPOINT. Both run at container start, not build."},
+    {"id": "cn-runc", "obj": "2.6",
+     "q": "runC and containerd relate to Docker/Podman how?",
+     "opts": ["They are the lower-level runtimes that actually create and run containers",
+              "They are image registries like Docker Hub",
+              "They are network plugins for overlay networks",
+              "They convert containers into virtual machines"],
+     "why": "CLI (docker/podman) -> containerd (lifecycle) -> runC (spawns "
+            "the actual namespaced process per OCI spec)."},
+    {"id": "cn-luks", "obj": "3.1",
+     "q": "LUKS2 is used for:",
+     "opts": ["Block-device (full-disk) encryption with multiple key slots",
+              "Per-file encryption inside ext4",
+              "Encrypting network traffic between hosts",
+              "Hashing passwords in /etc/shadow"],
+     "why": "cryptsetup luksFormat encrypts whole devices; key slots allow "
+            "several passphrases. LUKS2's default KDF is Argon2."},
+    {"id": "cn-argon2", "obj": "3.1",
+     "q": "Argon2 is:",
+     "opts": ["A memory-hard key-derivation/password-hashing function",
+              "A TLS cipher suite",
+              "An asymmetric signature algorithm",
+              "A disk-wiping standard"],
+     "why": "Memory-hardness makes GPU cracking expensive - that's why LUKS2 "
+            "and modern password storage use it."},
+    {"id": "cn-cve", "obj": "5.4",
+     "q": "The difference between CVE and CVSS is:",
+     "opts": ["CVE is the vulnerability's ID; CVSS scores its severity (0-10)",
+              "CVE scores severity; CVSS assigns the identifier",
+              "CVE applies to kernels only; CVSS to applications",
+              "They are competing vulnerability databases"],
+     "why": "CVE-2024-XXXX names it; CVSS rates it. Patch priority usually "
+            "follows the CVSS score."},
+    {"id": "cn-cis", "obj": "3.1",
+     "q": "CIS Benchmarks and OpenSCAP are best described as:",
+     "opts": ["Hardening baselines and a tool that audits systems against them",
+              "Intrusion detection daemons",
+              "Vulnerability exploit frameworks",
+              "Encrypted backup formats"],
+     "why": "CIS publishes the checklists; OpenSCAP scans hosts against such "
+            "profiles and reports compliance."},
+    {"id": "cn-aide", "obj": "3.1",
+     "q": "AIDE protects a system by:",
+     "opts": ["Storing file hashes and reporting unauthorized changes (integrity checking)",
+              "Blocking brute-force SSH attempts",
+              "Encrypting log files at rest",
+              "Sandboxing untrusted applications"],
+     "why": "Advanced Intrusion Detection Environment: baseline the "
+            "filesystem, re-scan, diff. rkhunter hunts rootkits similarly."},
+    {"id": "cn-stateful", "obj": "3.2",
+     "q": "A STATEFUL firewall differs from a stateless one because it:",
+     "opts": ["Tracks connections, auto-allowing return traffic of established flows",
+              "Filters only on MAC addresses",
+              "Must list a rule for every reply packet",
+              "Works only for UDP"],
+     "why": "Connection tracking is why one 'allow outbound 443' rule covers "
+            "the replies. Stateless ACLs need both directions."},
+    {"id": "cn-dnat", "obj": "3.2",
+     "q": "DNAT is typically used to:",
+     "opts": ["Rewrite the DESTINATION so outside traffic reaches an internal server (port forwarding)",
+              "Hide many internal clients behind one public source IP",
+              "Encrypt NAT'd traffic automatically",
+              "Drop packets with spoofed addresses"],
+     "why": "DNAT changes destination (publish a service in); SNAT/masquerade "
+            "changes source (many clients out)."},
+    {"id": "cn-sla", "obj": "5.1",
+     "q": "SLA, SLO, and SLI relate as:",
+     "opts": ["SLI = the measurement, SLO = the internal target, SLA = the contractual promise",
+              "SLA = the metric, SLI = the contract, SLO = the penalty",
+              "All three are interchangeable terms for uptime",
+              "SLO applies to networks, SLI to storage, SLA to compute"],
+     "why": "You MEASURE an indicator (SLI: p99 latency), set an OBJECTIVE "
+            "(SLO: <200ms 99.9%), and PROMISE it contractually (SLA)."},
+    {"id": "cn-mib", "obj": "5.1",
+     "q": "In SNMP monitoring, a MIB is:",
+     "opts": ["The structured database of OIDs a device exposes for querying",
+              "The agent process running on the monitored host",
+              "An alert sent when a threshold is crossed",
+              "The encryption key for SNMPv3"],
+     "why": "Management Information Base maps OIDs to meanings. The "
+            "threshold-crossing alert is a TRAP."},
+    {"id": "cn-gitops", "obj": "4.1",
+     "q": "GitOps means:",
+     "opts": ["Git is the source of truth; automation continuously applies the repo's declared state",
+              "Developers get root via git hooks",
+              "Backups of /etc are committed nightly",
+              "Operations teams review every commit manually"],
+     "why": "Declare infrastructure in git; an agent (e.g. Argo CD) "
+            "reconciles reality to match. Rollback = git revert."},
+    {"id": "cn-pod", "obj": "4.1",
+     "q": "In Kubernetes, the difference between a Pod and a Deployment is:",
+     "opts": ["A Pod runs containers; a Deployment manages replicas and updates of Pods",
+              "A Deployment runs containers; Pods schedule nodes",
+              "Pods are permanent, Deployments are temporary",
+              "They are the same object at different API versions"],
+     "why": "Pod = smallest runnable unit. Deployment keeps N replicas alive "
+            "and handles rolling updates - you scale Deployments, not Pods."},
+    {"id": "cn-cloudinit", "obj": "4.1",
+     "q": "cloud-init and Kickstart are both used to:",
+     "opts": ["Automate first-boot/installation configuration of new systems",
+              "Encrypt cloud storage volumes",
+              "Monitor VM resource usage",
+              "Convert VMs between hypervisors"],
+     "why": "Kickstart automates Anaconda installs (RHEL); cloud-init "
+            "configures cloud images on first boot (users, keys, packages)."},
+]
+
+
+def concept_drill(prog):
+    """Multiple-choice cards, weakest-first, one per screen."""
+    rec = prog.setdefault("concept", {})
+    last = None
+    letters = "abcd"
+    clear_screen()
+    while True:
+        def _acc(q):
+            st = rec.get(q["id"])
+            return (st[0] / st[1]) if st and st[1] else -1.0
+        pool = sorted(CONCEPTS, key=_acc)[:10]
+        cands = [q for q in pool if q["id"] != last] or pool
+        q = random.choice(cands)
+        last = q["id"]
+        opts = list(enumerate(q["opts"]))
+        random.shuffle(opts)
+        print(f"{c('>>')} {b(q['q'])}  {d('· obj ' + q['obj'])}\n")
+        correct = None
+        for i, (orig, text) in enumerate(opts):
+            if orig == 0:
+                correct = letters[i]
+            print(f"   {c(letters[i] + ')')} {text}")
+        ans = None
+        while True:
+            ans = prompt_line(f"\n{g('answer> ')}").strip().lower()
+            if ans in (":quit", ":q"):
+                return "quit"
+            if ans in (":menu", ":m"):
+                return "menu"
+            if ans in (":skip", ":n"):
+                ans = None
+                break
+            if ans in ("a", "b", "c", "d"):
+                break
+            print(r("  Answer a, b, c, or d  (:skip / :menu / :quit)"))
+        st = rec.setdefault(q["id"], [0, 0])
+        st[1] += 1
+        print()
+        if ans == correct:
+            st[0] += 1
+            print(f"  {ok('Correct: ' + correct + ')')}")
+        elif ans:
+            print(f"  {bad('Not quite.')} {y('Answer: ' + correct + ')')}")
+        else:
+            print(f"  {y('Answer: ' + correct + ')')}")
+        print()
+        print(f"  {d(q['why'])}")
+        print(d("\n  [Enter] next card    [m] menu    [:quit] save & exit"))
+        ch = prompt_line(f"{g('> ')}").strip().lower()
+        if ch in (":quit", ":q"):
+            return "quit"
+        if ch in ("m", ":m", ":menu"):
+            return "menu"
+        clear_screen()
+
+
+def obj_report(prog):
+    """Exam-readiness by official objective."""
+    boxes = prog.get("boxes", {})
+    per = {}
+    for s in SCENARIOS:
+        e = per.setdefault(s["obj"], [0, 0, 0])   # total, seen, mastered
+        e[0] += 1
+        bx = boxes.get(s["id"], 0)
+        if bx >= 1:
+            e[1] += 1
+        if bx >= 5:
+            e[2] += 1
+    print(f"\n{b('=== Objective coverage ===')}")
+    for o in sorted(per):
+        tot, seen, mast = per[o]
+        title = OBJ_TITLES.get(o, "")
+        col = g if seen == tot else (y if seen else d)
+        print(f"  {c(o)} {title[:30]:30} seen {col(f'{seen:>2}/{tot:<2}')}"
+              f"  mastered {mast}")
+    crec = prog.get("concept", {})
+    if crec:
+        ok_ = sum(v[0] for v in crec.values())
+        tot_ = sum(v[1] for v in crec.values())
+        print(f"\n  {b('Concept cards:')} {ok_}/{tot_} correct across "
+              f"{len(crec)}/{len(CONCEPTS)} cards seen")
+    print()
+
+
 def main_menu(prog):
+    st = prog.get("streak", {})
+    streak = st.get("days", 0) if st.get("last_day", "") >= (
+        datetime.date.fromisoformat(_today())
+        - datetime.timedelta(days=1)).isoformat() else 0
+    n_due = len(due_scenarios(prog))
+    mastered = sum(1 for v in prog.get("boxes", {}).values() if v >= 5)
+    print()
+    print(f"  {d('streak')} {g(str(streak) + 'd') if streak else d('0d')}"
+          f"   {d('due for review')} "
+          f"{(y(str(n_due)) if n_due else g('0'))}"
+          f"   {d('mastered')} {c(str(mastered))}{d('/' + str(len(SCENARIOS)))}"
+          f"   {d('incidents')} "
+          f"{c(str(sum(1 for v in prog.get('incidents', {}).values() if v.get('solved'))))}"
+          f"{d('/' + str(len(INCIDENTS)))}")
     print(f"\n{b('What do you want to do?')}")
+    if n_due:
+        print(f"  {c('r')}  Daily review         "
+              f"{y('(' + str(n_due) + ' due)')}  {m('<- start here')}")
     print(f"  {c('1')}  GYM mode             "
           f"{d('(learn & drill tools by category)')}")
     print(f"  {c('2')}  Scenario practice    "
           f"{d('(pick a domain, hints on demand)')}")
     print(f"  {c('3')}  Mixed exam mode      {d('(everything, no scaffolding)')}")
-    print(f"  {c('4')}  Progress")
+    print(f"  {c('4')}  Incident mode        "
+          f"{d('(multi-step troubleshooting cases)')}")
+    print(f"  {c('5')}  Concept drills       "
+          f"{d('(multiple-choice exam theory)')}")
+    print(f"  {c('6')}  Progress")
     print(f"  {c('q')}  Save and quit")
     while True:
         ch = prompt_line(f"\n{g('menu> ')}").strip().lower()
         if ch in ("q", ":quit", ":q"):
             return "quit"
-        if ch in ("1", "2", "3", "4"):
+        if ch in ("1", "2", "3", "4", "5", "6", "r"):
             return ch
-        print(r("  Pick 1-4 or q."))
+        print(r("  Pick 1-6, r, or q."))
 
 
 def run():
@@ -4357,7 +5443,15 @@ def run():
         if choice == "quit":
             bye()
             return
-        if choice == "1":
+        if choice == "r":
+            pool = due_scenarios(prog)
+            if not pool:
+                print(d("\n  Nothing due right now - reviews queue up "
+                        "automatically as you study."))
+                continue
+            res = study_loop(pool, "practice", prog,
+                             min(8, max(3, len(pool))), "daily review")
+        elif choice == "1":
             res = learn_tool(prog)
         elif choice == "2":
             difficulty = cli_level or "practice"
@@ -4369,9 +5463,14 @@ def run():
                                  difficulty, prog, session_len)
         elif choice == "3":
             res = study_loop(SCENARIOS, "exam", prog, session_len, "mixed exam")
+        elif choice == "4":
+            res = incident_mode(prog)
+        elif choice == "5":
+            res = concept_drill(prog)
         else:
             show_stats(prog)
             tool_report(prog)
+            obj_report(prog)
             res = "menu"
         save_progress(progress_path, prog)
         if res == "quit":

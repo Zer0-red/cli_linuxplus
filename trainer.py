@@ -38,7 +38,7 @@ import textwrap
 import datetime
 
 # Bump on EVERY delivered change: major.minor.patch
-__version__ = "2.9.0"
+__version__ = "3.0.0"
 
 # --------------------------------------------------------------------------- #
 #  Scenario bank  (all original, written from the published XK0-006 objectives)
@@ -3690,6 +3690,22 @@ def run_drill(dr, prog, tool, rep):
                 print(f"  {d(dr['e'])}")
             prog["drill_reps"] = prog.get("drill_reps", 0) + 1
             _fam_record(prog, tool, False)
+            if ans not in (":skip", ":n"):
+                print(f"\n  {b('Type it once - hands remember:')}")
+                while True:
+                    tb = prompt_line(f"  {g('$ ')}").strip()
+                    if not tb:
+                        continue
+                    if tb in (":quit", ":q"):
+                        return "quit"
+                    if tb in (":menu", ":m"):
+                        return "menu"
+                    if tb in (":skip", ":n"):
+                        break
+                    if check_answer(tb, pseudo):
+                        print(f"  {ok('Locked in.')}")
+                        break
+                    print(f"  {bad('Almost - it is right above.')}")
             return "ok"
         if check_answer(ans, pseudo):
             prog["drill_reps"] = prog.get("drill_reps", 0) + 1
@@ -3890,6 +3906,22 @@ def ask_scenario(sc, prog, difficulty="practice"):
             prog["seen"] = prog.get("seen", 0) + 1
             _touch_day(prog)
             _schedule_review(prog, sc["id"])
+            if difficulty in ("practice", "tutorial"):
+                print(f"\n  {b('Type it once - hands remember:')}")
+                while True:
+                    tb = prompt_line(f"  {g('$ ')}").strip()
+                    if not tb:
+                        continue
+                    if tb in (":quit", ":q"):
+                        return "quit"
+                    if tb in (":menu", ":m"):
+                        return "menu"
+                    if tb in (":skip", ":n"):
+                        break
+                    if check_answer(tb, sc):
+                        print(f"  {ok('Locked in.')}")
+                        break
+                    print(f"  {bad('Almost - it is right above.')}")
             if difficulty != "learn":
                 tm[bucket][1] += 1
             return "next"
@@ -4275,6 +4307,221 @@ def _ask_example(fam, goal, cmd, why, sim, show_answer=True):
             print(f"\n  {c('>>')} {b('Goal:')} {goal}")
 
 
+# --------------------------------------------------------------------------- #
+#  BUILD-IT-UP intros: learn a tool's flags by TYPING the growing command and
+#  watching the simulated output change at every step. Doing, not reading.
+# --------------------------------------------------------------------------- #
+
+BUILDUPS = {
+    "ss": [
+        {"goal": "Start bare: list sockets with plain ss.",
+         "cmd": "ss",
+         "out": "Netid State  Local Address:Port      Peer Address:Port\n"
+                "u_str ESTAB  /run/systemd/journal 23456            * 0\n"
+                "udp   ESTAB  192.168.1.40:42654    192.168.1.1:53\n"
+                "tcp   ESTAB  10.0.0.12:22          10.0.0.8:52814\n"
+                "tcp   LISTEN 0.0.0.0:80            0.0.0.0:*\n"
+                "... (hundreds more lines)",
+         "note": "Every socket, every state, every family. Unusable. Let's filter."},
+        {"goal": "Too much noise. Show TCP sockets ONLY - add -t.",
+         "cmd": "ss -t",
+         "out": "State  Recv-Q Send-Q Local Address:Port   Peer Address:Port\n"
+                "ESTAB  0      0      10.0.0.12:22         10.0.0.8:52814\n"
+                "ESTAB  0      0      10.0.0.12:48292      151.101.1.69:443",
+         "note": "Only TCP now - but these are active CONNECTIONS, not servers."},
+        {"goal": "We want servers waiting for connections: add -l (listening).",
+         "cmd": "ss -tl",
+         "out": "State   Recv-Q Send-Q Local Address:Port  Peer Address:Port\n"
+                "LISTEN  0      128    0.0.0.0:ssh         0.0.0.0:*\n"
+                "LISTEN  0      511    0.0.0.0:http        0.0.0.0:*",
+         "note": "Just the listeners. But 'ssh' and 'http' hide the real port numbers."},
+        {"goal": "Show real port NUMBERS instead of service names - add -n.",
+         "cmd": "ss -tln",
+         "out": "State   Recv-Q Send-Q Local Address:Port  Peer Address:Port\n"
+                "LISTEN  0      128    0.0.0.0:22          0.0.0.0:*\n"
+                "LISTEN  0      511    0.0.0.0:80          0.0.0.0:*",
+         "note": "Numeric. One question left: WHICH PROCESS owns each socket?"},
+        {"goal": "Final form: add -u (UDP too) and -p (owning process).",
+         "cmd": "ss -tulpn",
+         "out": "Netid State  Local Address:Port  Process\n"
+                "udp   UNCONN 0.0.0.0:53    users:((\"systemd-resolve\",pid=611,fd=13))\n"
+                "tcp   LISTEN 0.0.0.0:22    users:((\"sshd\",pid=812,fd=3))\n"
+                "tcp   LISTEN 0.0.0.0:80    users:((\"nginx\",pid=1490,fd=6))",
+         "note": "ss -tulpn: the exam answer for 'what is listening and who owns it'."},
+    ],
+    "journalctl": [
+        {"goal": "Start bare: open the whole journal.",
+         "cmd": "journalctl",
+         "out": "Jun 01 00:00:03 lab systemd[1]: Starting Daily apt activities...\n"
+                "Jun 01 00:00:04 lab CRON[311]: (root) CMD (test -x /usr/sbin/anacron)\n"
+                "... (412,886 more lines since first boot)",
+         "note": "EVERYTHING since forever. Nobody reads this. Filter it."},
+        {"goal": "Only one service matters right now: filter to sshd with -u.",
+         "cmd": "journalctl -u sshd",
+         "out": "May 02 09:14:11 lab sshd[801]: Server listening on 0.0.0.0 port 22.\n"
+                "Jun 10 08:14:02 lab sshd[812]: Server listening on 0.0.0.0 port 22.\n"
+                "Jun 10 09:30:51 lab sshd[4471]: Accepted publickey for marco",
+         "note": "One unit - but still EVERY boot back to May."},
+        {"goal": "Yesterday's reboot is what we care about: limit to this boot with -b.",
+         "cmd": "journalctl -u sshd -b",
+         "out": "Jun 10 08:14:02 lab sshd[812]: Server listening on 0.0.0.0 port 22.\n"
+                "Jun 10 09:30:51 lab sshd[4471]: Accepted publickey for marco",
+         "note": "-b = current boot. (-b -1 would be the previous one.)"},
+        {"goal": "Triage mode: only show errors and worse - add -p err.",
+         "cmd": "journalctl -u sshd -b -p err",
+         "out": "Jun 10 11:02:13 lab sshd[6120]: error: kex_exchange_identification: "
+                "read: Connection reset",
+         "note": "-p err cuts priority 4+ noise. Unit + boot + priority = surgical."},
+    ],
+    "grep": [
+        {"goal": "Start simple: find 'error' in one file.",
+         "cmd": "grep error /var/log/syslog",
+         "out": "Jun 10 11:21:18 lab nginx[1490]: [error] connect() failed",
+         "note": "One match... but this missed 'Error' and 'ERROR'. grep is case-sensitive."},
+        {"goal": "Catch every casing - add -i (ignore case).",
+         "cmd": "grep -i error /var/log/syslog",
+         "out": "Jun 10 09:02:33 lab sshd[3120]: ERROR: maximum authentication attempts\n"
+                "Jun 10 11:21:18 lab nginx[1490]: [error] connect() failed\n"
+                "Jun 10 13:40:09 lab kernel: ACPI Error: could not evaluate _DSM",
+         "note": "Three hits now. But errors live in MANY files under /var/log."},
+        {"goal": "Search the whole directory tree - add -r and point at /var/log.",
+         "cmd": "grep -ri error /var/log",
+         "out": "/var/log/syslog:Jun 10 11:21:18 lab nginx[1490]: [error] connect()\n"
+                "/var/log/auth.log:Jun 10 09:02:33 lab sshd[3120]: ERROR: maximum\n"
+                "/var/log/dpkg.log:2026-05-28 status error linux-image-6.8.0",
+         "note": "Recursive + case-blind: the exam's favorite grep combo."},
+        {"goal": "To cite findings you need line numbers - add -n.",
+         "cmd": "grep -rin error /var/log",
+         "out": "/var/log/syslog:8123:... nginx[1490]: [error] connect() failed\n"
+                "/var/log/auth.log:441:... sshd[3120]: ERROR: maximum authentication",
+         "note": "-rin: recurse, ignore case, number lines. Muscle memory material."},
+    ],
+    "tar": [
+        {"goal": "Create a plain archive of /etc: -c (create) -f (file name).",
+         "cmd": "tar -cf backup.tar /etc",
+         "out": "tar: Removing leading `/' from member names",
+         "note": "Silent success (that warning is normal). But it's UNCOMPRESSED."},
+        {"goal": "Compress it with gzip on the fly - add -z (and name it .tar.gz).",
+         "cmd": "tar -czf backup.tar.gz /etc",
+         "out": "tar: Removing leading `/' from member names",
+         "note": "-z = gzip, -j = bzip2, -J = xz. The NAME must follow -f - order trap!"},
+        {"goal": "Watch what goes in - add -v (verbose).",
+         "cmd": "tar -czvf backup.tar.gz /etc",
+         "out": "/etc/hostname\n/etc/hosts\n/etc/fstab\n... (1,402 more)",
+         "note": "czf creates; xzf extracts; tzf just lists. One letter flips the verb."},
+    ],
+    "find": [
+        {"goal": "Start bare: walk everything under /etc.",
+         "cmd": "find /etc",
+         "out": "/etc\n/etc/fstab\n/etc/hosts\n/etc/ssh\n/etc/ssh/sshd_config\n"
+                "... (1,900 more entries)",
+         "note": "find lists EVERYTHING below the path. Now make it selective."},
+        {"goal": "Find one file by name - add -name hosts.",
+         "cmd": "find /etc -name hosts",
+         "out": "/etc/hosts",
+         "note": "Tests stack left to right. Let's add a second condition."},
+        {"goal": "Hunt big files: search / for FILES (-type f) over 100M (-size +100M).",
+         "cmd": "find / -type f -size +100M",
+         "out": "/var/lib/mysql/ibdata1\n/var/log/journal/system.journal\n"
+                "/home/marco/Downloads/ubuntu-24.04.iso",
+         "note": "+100M = bigger than, -100M = smaller. This is THE disk-hog finder."},
+    ],
+    "rsync": [
+        {"goal": "Sync a directory: -a (archive: keep perms/times) -v (show files).",
+         "cmd": "rsync -av /home/data/ backup01:/srv/data",
+         "out": "sending incremental file list\nreports/q2.xlsx\ndb/dump.sql\n"
+                "sent 48.21M bytes  9.64M bytes/sec",
+         "note": "-a is 7 flags in one (rlptgoD). Trailing / on the source matters!"},
+        {"goal": "It's going over the WAN - compress in flight with -z.",
+         "cmd": "rsync -avz /home/data/ backup01:/srv/data",
+         "out": "sending incremental file list\nsent 11.02M bytes  2.20M bytes/sec",
+         "note": "Same files, a quarter of the bytes on the wire."},
+        {"goal": "Before a risky sync, REHEARSE it - add -n (dry run).",
+         "cmd": "rsync -avzn /home/data/ backup01:/srv/data",
+         "out": "sending incremental file list (DRY RUN)\nreports/q2.xlsx\n"
+                "sent 1.2K bytes  total size is 48.21M  (DRY RUN)",
+         "note": "-n shows what WOULD happen. Pair it with --delete before mirroring."},
+    ],
+    "ps": [
+        {"goal": "Start bare: what does plain ps show?",
+         "cmd": "ps",
+         "out": "    PID TTY          TIME CMD\n   4811 pts/0    00:00:00 bash\n"
+                "   5102 pts/0    00:00:00 ps",
+         "note": "Just YOUR terminal's processes. Nearly useless for admin work."},
+        {"goal": "Every process on the system - add -e.",
+         "cmd": "ps -e",
+         "out": "    PID TTY      TIME     CMD\n      1 ?        00:00:04 systemd\n"
+                "    812 ?        00:00:00 sshd\n   1322 ?        00:06:12 mysqld\n"
+                "... (214 more)",
+         "note": "All of them - but no owners, no CPU, no full commands."},
+        {"goal": "Full detail - add -f (or use the BSD classic: ps aux).",
+         "cmd": "ps -ef",
+         "out": "UID    PID  PPID  C STIME TTY  TIME     CMD\n"
+                "root     1     0  0 Jun09 ?    00:00:04 /sbin/init\n"
+                "mysql 1322     1  0 Jun09 ?    00:06:12 /usr/sbin/mysqld",
+         "note": "ps -ef and ps aux are the two canonical 'show me everything' forms."},
+    ],
+    "du": [
+        {"goal": "Ask how big /var/log is - start bare.",
+         "cmd": "du /var/log",
+         "out": "8       /var/log/private\n2104    /var/log/apt\n"
+                "1488    /var/log/nginx\n18874368 /var/log/journal\n"
+                "... (every subdirectory, in raw KiB)",
+         "note": "It spams every subdir in kilobytes. Two flags fix this."},
+        {"goal": "One total instead of the spam - add -s (summarize).",
+         "cmd": "du -s /var/log",
+         "out": "18897012        /var/log",
+         "note": "One line... but who knows what 18897012 KiB is at a glance?"},
+        {"goal": "Make it readable - add -h (human units).",
+         "cmd": "du -sh /var/log",
+         "out": "19G     /var/log",
+         "note": "du -sh: THE 'how big is this directory' command. Pairs with df -h."},
+    ],
+}
+
+
+def _run_buildup(fam, prog, steps_total):
+    """Step 1 (hands-on variant): grow the command flag by flag, watching
+    the output change. Returns 'quit'/'menu' or None when complete."""
+    stages = BUILDUPS[fam]
+    tm = _toolmode(prog, fam)
+    for i, stg in enumerate(stages, 1):
+        clear_screen()
+        _hdr(fam, 1, steps_total, "Build it up", f"{i} of {len(stages)}")
+        print()
+        print(f"  {c('>>')} {b(stg['goal'])}")
+        print(f"  {b('Type:')}  {c(stg['cmd'])}")
+        while True:
+            ans = prompt_line(f"\n  {g('$ ')}").strip()
+            if not ans:
+                continue
+            if ans in (":quit", ":q"):
+                return "quit"
+            if ans in (":menu", ":m"):
+                return "menu"
+            if ans in (":skip", ":n"):
+                break
+            if check_answer(ans, {"accept": [stg["cmd"]], "mode": "smart"}):
+                tm["learn"] += 1
+                print()
+                print(f"{g('user@lab')}{d(':')}{c('~')}{d('$')} {ans}")
+                print(stg["out"])
+                if stg.get("note"):
+                    print()
+                    print(f"  {y('\u25b8')} {stg['note']}")
+                break
+            diff = flag_diff(ans, [stg["cmd"]], fam)
+            print(f"  {bad('Almost - the command is right above.')}")
+            if diff:
+                render_diff(ans, diff)
+        if i < len(stages):
+            res = _lesson_pause("[Enter] next step    [m] menu    [:quit] exit")
+            if res:
+                return res
+    res = _lesson_pause("[Enter] on to the worked examples    [m] menu    [:quit] exit")
+    return res
+
+
 def _run_learn_flow(fam, prog):
     pool = fam_scenarios(fam)
     sc0, _, _ = instantiate(pool[0])
@@ -4288,14 +4535,19 @@ def _run_learn_flow(fam, prog):
     first_ok = 0
     total_q = 0
 
-    # ---- step 1: intro ----
-    clear_screen()
-    _hdr(fam, 1, steps, "Meet the tool")
-    print()
-    render_teach(sc0, ask=False)
-    res = _lesson_pause("[Enter] start the worked examples    [m] menu    [:quit] exit")
-    if res:
-        return res
+    # ---- step 1: intro (hands-on build-up where authored) ----
+    if fam in BUILDUPS:
+        res = _run_buildup(fam, prog, steps)
+        if res:
+            return res
+    else:
+        clear_screen()
+        _hdr(fam, 1, steps, "Meet the tool")
+        print()
+        render_teach(sc0, ask=False)
+        res = _lesson_pause("[Enter] start the worked examples    [m] menu    [:quit] exit")
+        if res:
+            return res
 
     # ---- step 2: worked examples, one per screen ----
     for i, (goal, cmd, why, sim, sid) in enumerate(examples, 1):
